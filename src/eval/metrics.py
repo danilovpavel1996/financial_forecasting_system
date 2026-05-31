@@ -93,6 +93,7 @@ def strategy_pnl(
     cost_bps: float = 5.0,
     mode: str = "sign",
     periods_per_year: int = 252,
+    horizon: int = 1,
 ) -> StrategyStats:
     """Convert predictions to positions and compute net-of-cost performance.
 
@@ -107,6 +108,12 @@ def strategy_pnl(
     mode:       "sign"   → +1 / 0 / -1 binary position.
                 "scaled" → position proportional to pred, clipped to [-1, 1].
     periods_per_year: annualisation factor (252 for daily).
+    horizon:    forecast horizon in days. When > 1, consecutive realized values
+                share (horizon-1) days of return data, inflating Sharpe by
+                ~sqrt(horizon) if all observations are used. We subsample every
+                horizon-th observation so only non-overlapping periods enter the
+                Sharpe/vol calculation. Turnover is still computed on the full
+                daily series.
     """
     pred = np.asarray(pred, float)
     realized = np.asarray(realized, float)
@@ -126,8 +133,13 @@ def strategy_pnl(
     cost = daily_turnover * (cost_bps / 1e4)
 
     net = pos * realized - cost
-    finite_mask = np.isfinite(net)
-    net_clean = net[finite_mask]
+
+    # Subsample to non-overlapping horizon-day blocks; annualise accordingly.
+    net_eval = net[::horizon] if horizon > 1 else net
+    ppy = periods_per_year / horizon
+
+    finite_mask = np.isfinite(net_eval)
+    net_clean = net_eval[finite_mask]
 
     mean_turnover = float(daily_turnover.mean())
 
@@ -141,8 +153,8 @@ def strategy_pnl(
             hit_rate=directional_accuracy(pred, realized),
         )
 
-    ann_return = float(np.mean(net_clean) * periods_per_year)
-    ann_vol = float(np.std(net_clean) * np.sqrt(periods_per_year))
+    ann_return = float(np.mean(net_clean) * ppy)
+    ann_vol = float(np.std(net_clean) * np.sqrt(ppy))
 
     # Use a small epsilon for the zero-vol guard: np.std on truly identical
     # float64 values can return ~1e-18 (floating-point residual) rather than

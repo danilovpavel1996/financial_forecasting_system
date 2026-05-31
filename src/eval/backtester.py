@@ -105,11 +105,14 @@ class Backtester:
     splitter:  a configured WalkForwardSplitter instance.
     cost_bps:  round-trip transaction cost in basis points.
     pnl_mode:  "sign" or "scaled" position construction.
+    horizon:   forecast horizon in days; passed to strategy_pnl for
+               non-overlapping Sharpe calculation when horizon > 1.
     """
 
     splitter: WalkForwardSplitter
     cost_bps: float = 5.0
     pnl_mode: str = "sign"
+    horizon: int = 1
 
     def run(
         self,
@@ -207,7 +210,7 @@ class Backtester:
             ic_stability=(
                 float(np.mean([ic > 0 for ic in finite_ics])) if finite_ics else np.nan
             ),
-            strategy=strategy_pnl(all_pred, all_real, self.cost_bps, self.pnl_mode),
+            strategy=strategy_pnl(all_pred, all_real, self.cost_bps, self.pnl_mode, horizon=self.horizon),
         )
 
 

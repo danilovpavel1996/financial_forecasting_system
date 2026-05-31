@@ -400,6 +400,38 @@ def test_comparison_table_shape():
 # Cross-check: backtester respects splitter embargo
 # --------------------------------------------------------------------------- #
 
+def test_sharpe_stable_across_horizons():
+    """strategy_pnl(horizon=5) should give approximately the same Sharpe as
+    horizon=1 once non-overlapping subsampling is applied.
+
+    Without the fix, Sharpe inflates by ~sqrt(5) ≈ 2.24 at horizon=5.
+    With the fix, both Sharpes should be within 0.15 of each other.
+    """
+    rng = np.random.default_rng(42)
+    n = 3000
+    mu = 0.0005   # positive daily drift
+    sigma = 0.01
+    # Generate one more day of returns than we need for the 5-day window
+    daily_r = rng.normal(mu, sigma, n + 5)
+
+    realized_1d = daily_r[1 : n + 1]
+    realized_5d = np.array([daily_r[t + 1 : t + 6].sum() for t in range(n)])
+
+    # Constant long position (like Drift on positive-drift data), no cost
+    pred = np.ones(n)
+
+    stats_1 = strategy_pnl(pred, realized_1d, cost_bps=0.0, horizon=1)
+    stats_5 = strategy_pnl(pred, realized_5d, cost_bps=0.0, horizon=5)
+
+    assert np.isfinite(stats_1.sharpe), "horizon=1 Sharpe is not finite"
+    assert np.isfinite(stats_5.sharpe), "horizon=5 Sharpe is not finite"
+    diff = abs(stats_1.sharpe - stats_5.sharpe)
+    assert diff < 0.15, (
+        f"Sharpe should be stable across horizons: "
+        f"h1={stats_1.sharpe:.3f}, h5={stats_5.sharpe:.3f}, diff={diff:.3f}"
+    )
+
+
 def test_backtester_uses_splitter_embargo():
     """Backtester honours the splitter's embargo: predictions only exist in OOS period."""
     embargo = 10

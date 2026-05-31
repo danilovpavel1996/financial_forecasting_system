@@ -93,7 +93,7 @@ def run_pipeline(
     y = target.values
 
     splitter = WalkForwardSplitter.from_config(cfg)
-    bt = Backtester(splitter=splitter, cost_bps=cfg.cost_bps)
+    bt = Backtester(splitter=splitter, cost_bps=cfg.cost_bps, horizon=cfg.horizon)
 
     rng_seed = cfg.random_seed
     factories = {
