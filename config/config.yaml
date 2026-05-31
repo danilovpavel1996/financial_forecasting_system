@@ -1,0 +1,45 @@
+universe:
+  metals:
+    - "GC=F"    # Gold futures
+    - "SI=F"    # Silver futures
+    - "PL=F"    # Platinum futures
+    - "PA=F"    # Palladium futures
+  etfs:
+    - "GLD"
+    - "SLV"
+    - "GDX"
+  macro_context:
+    - "SPY"
+    - "TLT"
+    - "UUP"
+    - "^VIX"
+
+fred_series:
+  - "DFII10"    # 10Y TIPS real yield
+  - "T10YIE"    # 10Y breakeven inflation
+  - "DGS10"     # 10Y nominal Treasury yield
+  - "DTWEXBGS"  # Broad trade-weighted USD index
+  - "VIXCLS"    # VIX (FRED version)
+
+dates:
+  start: "2010-01-01"
+  end: "2024-12-31"
+
+horizon: 1          # forecast horizon in trading days (target: forward return at t+horizon)
+
+cost_bps: 5         # round-trip transaction cost in basis points
+
+splitter:
+  n_splits: 8
+  train_years: 3    # minimum training window in years
+  test_years: 1     # out-of-sample test window per fold
+  embargo: 5        # embargo gap in trading days (must be >= horizon)
+
+random_seed: 42
+
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  outputs_figures: "outputs/figures"
+  outputs_reports: "outputs/reports"
+  outputs_models: "outputs/models"
