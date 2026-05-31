@@ -162,11 +162,7 @@ def correlation_heatmap(prices: dict, tickers: list[str]) -> go.Figure:
         colorbar=dict(title="ρ"),
         hovertemplate="%{y} / %{x}<br>ρ = %{z:.3f}<extra></extra>",
     ))
-    fig.update_layout(
-        **_LAYOUT,
-        title="Daily Log-Return Correlations",
-        margin=dict(l=60, r=20, t=50, b=60),
-    )
+    fig.update_layout(**_LAYOUT, title="Daily Log-Return Correlations")
     return fig
 
 
