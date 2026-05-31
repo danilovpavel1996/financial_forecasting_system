@@ -13,6 +13,21 @@ universe:
     - "TLT"
     - "UUP"
     - "^VIX"
+  # Phase 8: 9-asset cross-sectional basket (ranked in the CS pipeline)
+  ranked_assets:
+    metals:
+      - "GC=F"    # Gold
+      - "SI=F"    # Silver
+      - "PL=F"    # Platinum
+      - "PA=F"    # Palladium
+    energy:
+      - "CL=F"    # WTI Crude Oil
+      - "NG=F"    # Natural Gas
+    industrial:
+      - "HG=F"    # Copper
+    agricultural:
+      - "ZC=F"    # Corn
+      - "ZS=F"    # Soybeans
 
 fred_series:
   - "DFII10"    # 10Y TIPS real yield

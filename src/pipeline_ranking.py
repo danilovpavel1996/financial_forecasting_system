@@ -86,12 +86,21 @@ def run_ranking_pipeline(
     # ── Splitter ─────────────────────────────────────────────────────────────
     splitter = WalkForwardSplitter.from_config(cfg)
 
-    metals = universe.metal_tickers(cfg)
+    ranked = universe.ranked_tickers(cfg)
+    n_assets = len(ranked)
+    # With ≥ 9 assets use top-2 / bottom-2; with fewer fall back to 1/1.
+    n_long = 2 if n_assets >= 6 else 1
+    n_short = 2 if n_assets >= 6 else 1
+    logger.info(
+        "Ranking universe: %d assets, n_long=%d, n_short=%d", n_assets, n_long, n_short
+    )
     bt = RankingBacktester(
         splitter=splitter,
         cost_bps=cfg.cost_bps,
         horizon=horizon,
-        assets=sorted(metals),
+        assets=sorted(ranked),
+        n_long=n_long,
+        n_short=n_short,
     )
 
     rng_seed = cfg.random_seed

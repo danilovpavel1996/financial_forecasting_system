@@ -187,3 +187,76 @@ def test_missing_ticker_raises():
     ref = _ref_index(100)
     with pytest.raises(KeyError, match="PA=F"):
         build_cross_features(prices, _METALS, ref)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8: 9-asset basket tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+_9_ASSETS = ["GC=F", "SI=F", "PL=F", "PA=F", "CL=F", "NG=F", "HG=F", "ZC=F", "ZS=F"]
+
+
+def _make_prices_9(n: int = 200, seed: int = 0) -> dict[str, pd.DataFrame]:
+    """Synthetic OHLCV dict for all 9 Phase-8 assets."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2015-01-01", periods=n, freq="B")
+    out: dict[str, pd.DataFrame] = {}
+    for ticker in _9_ASSETS:
+        close = 100.0 * np.exp(rng.normal(0, 0.012, n).cumsum())
+        out[ticker] = pd.DataFrame(
+            {"Open": close, "High": close, "Low": close, "Close": close, "Volume": 0},
+            index=idx,
+        )
+    return out
+
+
+def test_relative_features_sum_to_zero_9_assets():
+    """With 9 assets, relative features sum to zero across the full basket."""
+    n = 200
+    prices = _make_prices_9(n)
+    ref = _ref_index(n)
+    feats = build_cross_features(prices, _9_ASSETS, ref)
+
+    rel_cols = [c for c in feats[_9_ASSETS[0]].columns if c.startswith("rel_")]
+    assert len(rel_cols) > 0, "No rel_ columns found in 9-asset features"
+
+    for col in rel_cols:
+        stacked = pd.concat(
+            [feats[t][col].rename(t) for t in _9_ASSETS], axis=1
+        )
+        row_sums = stacked.dropna().sum(axis=1)
+        max_abs = row_sums.abs().max()
+        assert max_abs < 1e-10, (
+            f"9-asset {col!r}: basket sum not zero (max|sum|={max_abs:.2e})"
+        )
+
+
+def test_all_9_assets_get_features():
+    """build_cross_features returns one DataFrame per asset for 9-asset basket."""
+    prices = _make_prices_9(150)
+    ref = _ref_index(150)
+    feats = build_cross_features(prices, _9_ASSETS, ref)
+    assert set(feats.keys()) == set(_9_ASSETS)
+
+
+def test_leakage_9_assets_drop_5():
+    """Shift-and-compare leakage test: 9-asset basket, drop last 5 rows."""
+    n = 200
+    prices_full = _make_prices_9(n)
+    ref_full = _ref_index(n)
+
+    prices_trunc = {t: df.iloc[:-5] for t, df in prices_full.items()}
+    ref_trunc = ref_full[:-5]
+
+    feats_full = build_cross_features(prices_full, _9_ASSETS, ref_full)
+    feats_trunc = build_cross_features(prices_trunc, _9_ASSETS, ref_trunc)
+
+    for ticker in _9_ASSETS:
+        shared = feats_full[ticker].index.intersection(feats_trunc[ticker].index)
+        assert len(shared) > 50
+        pd.testing.assert_frame_equal(
+            feats_full[ticker].loc[shared].sort_index(),
+            feats_trunc[ticker].loc[shared].sort_index(),
+            check_exact=True,
+            obj=f"9-asset cross_features[{ticker}] leakage test",
+        )

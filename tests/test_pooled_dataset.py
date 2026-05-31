@@ -219,3 +219,67 @@ def test_all_feature_cols_finite():
     fcols = feature_cols(pooled)
     n_nan = pooled[fcols].isna().sum().sum()
     assert n_nan == 0, f"Feature matrix has {n_nan} NaN values"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8: 9-asset fold-integrity test
+# ─────────────────────────────────────────────────────────────────────────────
+
+_9_ASSETS = ["GC=F", "SI=F", "PL=F", "PA=F", "CL=F", "NG=F", "HG=F", "ZC=F", "ZS=F"]
+
+
+def _make_synthetic_pooled_n(
+    assets: list,
+    n_dates: int = 500,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Synthetic pooled DataFrame for an arbitrary N-asset basket."""
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2015-01-01", periods=n_dates, freq="B")
+    rows = []
+    for date in dates:
+        for asset in assets:
+            row = {
+                "feat_a": rng.normal(),
+                "feat_b": rng.normal(),
+                "feat_c": rng.normal(),
+                "target": rng.normal(0, 0.01),
+            }
+            rows.append((date, asset, row))
+    idx = pd.MultiIndex.from_tuples(
+        [(d, a) for d, a, _ in rows], names=["date", "asset"]
+    )
+    return pd.DataFrame([r for _, _, r in rows], index=idx)
+
+
+def test_fold_integrity_9_assets():
+    """[REQUIRED] All 9 Phase-8 assets at the same date must land in the same fold."""
+    pooled = _make_synthetic_pooled_n(_9_ASSETS, n_dates=500)
+    splitter = WalkForwardSplitter(min_train=200, test_size=60, embargo=5)
+    unique_dates = pooled.index.get_level_values("date").unique().sort_values()
+    pooled_dates = pooled.index.get_level_values("date")
+
+    for k, (train_dpos, test_dpos) in enumerate(splitter.split(len(unique_dates))):
+        train_dates = set(unique_dates[train_dpos])
+        test_dates = set(unique_dates[test_dpos])
+
+        # No date in both train and test
+        overlap = train_dates & test_dates
+        assert len(overlap) == 0, f"Fold {k}: {len(overlap)} dates in both sets"
+
+        # Every test date has all 9 assets present and none in train
+        for date in test_dates:
+            assets_here = set(
+                pooled.loc[pooled_dates == date].index.get_level_values("asset")
+            )
+            assert set(_9_ASSETS).issubset(assets_here), (
+                f"Fold {k}, date {date}: missing assets: {set(_9_ASSETS) - assets_here}"
+            )
+            assert date not in train_dates
+
+
+def test_nine_assets_per_date():
+    """Every date in a 9-asset pooled dataset has exactly 9 rows."""
+    pooled = _make_synthetic_pooled_n(_9_ASSETS)
+    counts = pooled.groupby(level="date").size()
+    assert (counts == 9).all(), f"Some dates have != 9 rows: {counts[counts != 9].head()}"

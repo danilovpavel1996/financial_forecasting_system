@@ -1,9 +1,12 @@
-"""Cross-sectional features for the metals basket.
+"""Cross-sectional features for the ranked commodity basket.
 
 All features at time t use ONLY data available at or before t — the same
 invariant as price_features.py.  The basket-average subtraction is also
 strictly lagged: for date t, the basket mean uses each asset's own trailing
 computation at t, not any future value.
+
+Works for any basket size N ≥ 2.  Relative features sum to zero across the
+basket at every date by construction.
 
 Shift-and-compare leakage tests live in tests/test_cross_features.py.
 """
@@ -39,12 +42,14 @@ _RATIO_PAIRS = [
 
 def build_cross_features(
     prices: dict[str, pd.DataFrame],
-    metal_tickers: Sequence[str],
+    basket_tickers: Sequence[str],
     ref_index: pd.DatetimeIndex,
 ) -> dict[str, pd.DataFrame]:
-    """Build cross-sectional relative features for each metal in the basket.
+    """Build cross-sectional relative features for each asset in the basket.
 
-    For each metal ``a`` at date ``t`` the returned features are:
+    Works for any basket size N ≥ 2.
+
+    For each asset ``a`` at date ``t`` the returned features are:
 
     - ``rel_mom_10d``, ``rel_mom_21d``
           asset's trailing 10d/21d momentum minus basket-average momentum
@@ -53,20 +58,22 @@ def build_cross_features(
     - ``rel_dist_ma_20``, ``rel_dist_ma_60``
           asset's distance-from-MA minus basket-average distance
     - ``gold_silver_ratio``, ``gold_platinum_ratio``, ``silver_platinum_ratio``
-          log price-ratios (same value for all assets on the same date)
+          log price-ratios for precious metals pairs (skipped if tickers absent)
 
     Parameters
     ----------
-    prices:        dict mapping ticker → OHLCV DataFrame (from cache).
-    metal_tickers: the 4 metals to include in the basket.
-    ref_index:     common trading-day DatetimeIndex to align all series.
+    prices:         dict mapping ticker → OHLCV DataFrame (from cache).
+    basket_tickers: ordered list of N assets in the basket.
+    ref_index:      common trading-day DatetimeIndex to align all series.
 
     Returns
     -------
     dict mapping ticker → pd.DataFrame of cross-asset features,
     all sharing ``ref_index``.
     """
-    metal_tickers = list(metal_tickers)
+    basket_tickers = list(basket_tickers)
+    # keep internal variable name for minimal diff
+    metal_tickers = basket_tickers
 
     # ── Step 1: per-asset own features on the common calendar ──────────────
     own: dict[str, dict[str, pd.Series]] = {}

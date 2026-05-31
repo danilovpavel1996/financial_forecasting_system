@@ -2,15 +2,15 @@
 
 Stacks per-asset feature matrices into one tall DataFrame.  Each row is a
 (date, asset) pair.  The walk-forward splitter operates on DATES ONLY — all
-4 metals at the same date must be in the same fold, never split across
+N assets at the same date must be in the same fold, never split across
 train/test.
 
 Column layout
 -------------
-  own price features   (10 cols: ret_1d, ret_5d, ..., dist_ma_60)
-  cross-asset features (8 cols: rel_mom_*, rel_vol_*, ratios)
+  own price features   (~10 cols: ret_1d, ret_5d, ..., dist_ma_60)
+  cross-asset features (~8 cols: rel_mom_*, rel_vol_*, ratios)
   context ETF/macro    (~16 cols: same for every asset on the same date)
-  asset one-hot        (3 cols: is_gc, is_si, is_pl;  PA=F = reference)
+  asset one-hot        (N-1 cols: is_<ticker>; last sorted ticker = reference)
   target               (1 col:  forward log return at horizon)
 
 The 'asset' column is NOT included in the feature matrix — it is encoded
@@ -19,7 +19,6 @@ via the one-hot columns so sklearn models can ingest raw numpy arrays.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -34,13 +33,18 @@ from src.targets import forward_log_return
 
 logger = logging.getLogger(__name__)
 
-# Asset-level one-hot column names (PA=F is the reference, gets all zeros)
-_ONEHOT_MAP = {
-    "GC=F": "is_gc",
-    "SI=F": "is_si",
-    "PL=F": "is_pl",
-    # PA=F → no indicator column (reference category)
-}
+
+def _build_onehot_map(tickers: list[str]) -> dict[str, str]:
+    """Build {ticker: column_name} for N-1 one-hot columns.
+
+    Tickers are sorted; the last in sorted order is the reference category
+    (all-zero row).  Column names: 'is_' + ticker with '=^-' removed, lowercased.
+    """
+    tickers_sorted = sorted(tickers)
+    return {
+        t: "is_" + t.replace("=", "").replace("^", "").replace("-", "").lower()
+        for t in tickers_sorted[:-1]
+    }
 
 
 def build_pooled_dataset(
@@ -64,60 +68,86 @@ def build_pooled_dataset(
       - MultiIndex: (date [DatetimeIndex], asset [str])
       - feature columns (float) + 'target' column (float)
 
-    Only dates where ALL 4 metals have valid features AND a valid target are
-    included; the final set is the intersection across all 4 assets.
+    Only dates where ALL N ranked assets have valid features AND a valid target
+    are included; the final set is the intersection across all assets.
     """
-    metals = universe.metal_tickers(cfg)
-    if len(metals) != 4:
-        raise ValueError(f"Expected 4 metals, got {len(metals)}: {metals}")
+    metals = universe.ranked_tickers(cfg)
+    if not metals:
+        raise ValueError(
+            "No ranked_assets configured in config.yaml. "
+            "Add a universe.ranked_assets section for Phase 8+."
+        )
 
+    n_assets = len(metals)
+    metals_set = set(metals)
     late_close = set(universe.equity_context_tickers(cfg))
-    context_tickers = [t for t in universe.price_tickers(cfg) if t not in metals]
+    context_tickers = [t for t in universe.price_tickers(cfg) if t not in metals_set]
+
+    # One-hot: N-1 indicator columns, last sorted ticker is reference category
+    onehot_map = _build_onehot_map(metals)
+    onehot_cols = list(onehot_map.values())
 
     # ── Use GC=F's calendar as the shared reference ──────────────────────────
     ref_index: pd.DatetimeIndex = prices["GC=F"].index
 
-    # ── Common context features (same for all assets on the same date) ───────
-    # Build the ETF/macro context exactly once with GC=F as target.
-    all_context_prices = {t: prices[t] for t in context_tickers if t in prices}
-    # Build a GC=F price dict that includes context tickers for build_price_features
-    ctx_prices = dict(prices)  # shallow copy; includes all tickers
+    # Log per-asset row counts to flag coverage issues
+    for ticker in metals:
+        if ticker not in prices:
+            logger.warning("Ranked ticker %s not in prices dict — it will be missing.", ticker)
+            continue
+        n_rows = len(prices[ticker])
+        if n_rows < 2000:
+            logger.warning(
+                "Ticker %s has only %d rows (< 2000) — data coverage may be insufficient.",
+                ticker, n_rows,
+            )
+        else:
+            logger.info("Ticker %s: %d rows", ticker, n_rows)
 
+    # ── Common context features (same for all assets on the same date) ───────
     macro_feats = build_macro_features(macro_raw, trading_index=ref_index)
 
-    # ── Cross-asset features (all 4 metals together) ─────────────────────────
+    # ── Cross-asset features (all N assets together) ─────────────────────────
     cross_feats = build_cross_features(prices, metals, ref_index)
 
     # ── Per-asset own features + target ──────────────────────────────────────
     asset_dfs: list[pd.DataFrame] = []
 
     for ticker in metals:
-        # Own price features for this metal
+        # Own price features for this asset
         own_feats = build_price_features(
-            ctx_prices,
+            prices,
             target_ticker=ticker,
             context_tickers=context_tickers,
             late_close_tickers=list(late_close),
         )
-        # own_feats is indexed by GC=F's calendar when context tickers include GC=F;
-        # metals futures share the same CME calendar so the index matches.
 
         # Target: forward log return
-        close = prices[ticker]["Close"]
+        # Sanitize non-positive closes (e.g. CL=F on 2020-04-20) → NaN target
+        # so those dates are naturally dropped by the valid-date intersection.
+        close = prices[ticker]["Close"].copy()
+        n_nonpos = int((close <= 0).sum())
+        if n_nonpos:
+            logger.warning(
+                "Ticker %s: %d non-positive close price(s) → NaN target; "
+                "date(s) will be excluded from pooled dataset.",
+                ticker, n_nonpos,
+            )
+            close = close.where(close > 0)
         target = forward_log_return(close, horizon=horizon)
         target.name = "target"
 
-        # Cross-asset features for this metal
+        # Cross-asset features for this asset
         cross = cross_feats[ticker]
 
-        # Asset one-hot encoding
+        # Asset one-hot encoding: N-1 columns, reference = last sorted ticker
         onehot = pd.DataFrame(
-            {col: 0 for col in _ONEHOT_MAP.values()},
+            {col: 0.0 for col in onehot_cols},
             index=ref_index,
             dtype=float,
         )
-        if ticker in _ONEHOT_MAP:
-            onehot[_ONEHOT_MAP[ticker]] = 1.0
+        if ticker in onehot_map:
+            onehot[onehot_map[ticker]] = 1.0
 
         # Assemble all feature columns + macro + target
         df = (
@@ -134,21 +164,25 @@ def build_pooled_dataset(
 
         asset_dfs.append(df)
 
-    # ── Intersect valid dates across all 4 assets ─────────────────────────────
-    # For each asset: rows where ALL features and target are finite.
+    # ── Intersect valid dates across all N assets ─────────────────────────────
     valid_dates_per_asset: list[pd.Index] = []
     for df in asset_dfs:
-        feature_cols = [c for c in df.columns if c != "asset"]
-        ok = df[feature_cols].notna().all(axis=1)
+        feature_cols_here = [c for c in df.columns if c != "asset"]
+        ok = df[feature_cols_here].notna().all(axis=1)
         valid_dates_per_asset.append(df.index[ok])
+        n_valid = ok.sum()
+        ticker = df["asset"].iloc[0]
+        logger.info("Ticker %s: %d valid dates (of %d total)", ticker, n_valid, len(df))
 
     common_dates = valid_dates_per_asset[0]
     for vd in valid_dates_per_asset[1:]:
         common_dates = common_dates.intersection(vd)
 
+    n_dropped = len(valid_dates_per_asset[0]) - len(common_dates)
     logger.info(
-        "Pooled dataset: %d common dates across all %d metals (horizon=%d)",
-        len(common_dates), len(metals), horizon,
+        "Pooled dataset: %d common dates across all %d assets (horizon=%d); "
+        "%d dates dropped by intersection (calendar/coverage gaps).",
+        len(common_dates), n_assets, horizon, n_dropped,
     )
 
     # ── Stack into MultiIndex DataFrame ──────────────────────────────────────
@@ -164,18 +198,18 @@ def build_pooled_dataset(
 
     pooled = pd.concat(frames, axis=0).sort_index()
 
-    # Verify — should have exactly 4 rows per date
+    # Verify — should have exactly n_assets rows per date
     n_per_date = pooled.groupby(level="date").size()
-    bad_dates = n_per_date[n_per_date != len(metals)]
+    bad_dates = n_per_date[n_per_date != n_assets]
     if len(bad_dates):
         raise RuntimeError(
-            f"Pooled dataset has dates with != {len(metals)} assets: "
+            f"Pooled dataset has dates with != {n_assets} assets: "
             f"{bad_dates.head().to_dict()}"
         )
 
     logger.info(
         "Pooled dataset shape: %d rows × %d cols  (%d dates × %d assets)",
-        len(pooled), pooled.shape[1], len(common_dates), len(metals),
+        len(pooled), pooled.shape[1], len(common_dates), n_assets,
     )
     return pooled
 

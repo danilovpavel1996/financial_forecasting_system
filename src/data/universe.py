@@ -6,11 +6,51 @@ from typing import List
 from src.config import Config
 
 
-def price_tickers(cfg: Config) -> List[str]:
-    """All price tickers (metals + ETFs + macro context) in config order."""
+def ranked_tickers(cfg: Config) -> List[str]:
+    """Flat ordered list of ranked assets for the cross-sectional pipeline.
+
+    Reads from universe.ranked_assets in config.yaml.  The groups (metals,
+    energy, industrial, agricultural) are flattened in config order.
+    Returns an empty list when ranked_assets is not configured (Phase < 8).
+    """
+    ranked = cfg.universe.get("ranked_assets", {})
+    if isinstance(ranked, list):
+        return list(ranked)
     tickers: List[str] = []
-    for group in ("metals", "etfs", "macro_context"):
-        tickers.extend(cfg.universe.get(group, []))
+    for group_tickers in ranked.values():
+        tickers.extend(group_tickers)
+    return tickers
+
+
+def price_tickers(cfg: Config) -> List[str]:
+    """All price tickers for data fetching (ranked assets + context), deduplicated.
+
+    Phase 8+: returns ranked_assets + etfs + macro_context.
+    Phase <8: falls back to metals + etfs + macro_context (backward compat).
+    """
+    tickers: List[str] = []
+    seen: set = set()
+
+    # Phase 8+: ranked assets (superset of old metals)
+    for t in ranked_tickers(cfg):
+        if t not in seen:
+            tickers.append(t)
+            seen.add(t)
+
+    # Backward compat: if ranked_assets not configured, use legacy metals list
+    if not tickers:
+        for t in cfg.universe.get("metals", []):
+            if t not in seen:
+                tickers.append(t)
+                seen.add(t)
+
+    # Context tickers (ETFs + macro) — common to all phases
+    for group in ("etfs", "macro_context"):
+        for t in cfg.universe.get(group, []):
+            if t not in seen:
+                tickers.append(t)
+                seen.add(t)
+
     return tickers
 
 
