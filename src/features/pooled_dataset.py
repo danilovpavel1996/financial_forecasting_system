@@ -26,6 +26,7 @@ import pandas as pd
 
 from src.config import Config
 from src.data import universe
+from src.features.cot_features import build_cot_features, build_cross_cot_features
 from src.features.cross_features import build_cross_features
 from src.features.macro_features import build_macro_features
 from src.features.price_features import build_price_features
@@ -52,6 +53,7 @@ def build_pooled_dataset(
     prices: dict[str, pd.DataFrame],
     macro_raw: dict[str, pd.Series],
     horizon: int,
+    cot_raw: dict[str, pd.DataFrame] | None = None,
 ) -> pd.DataFrame:
     """Build the pooled (date × asset) feature + target DataFrame.
 
@@ -61,6 +63,8 @@ def build_pooled_dataset(
     prices:    dict mapping ticker → OHLCV DataFrame (all tickers loaded).
     macro_raw: dict mapping FRED series ID → daily Series.
     horizon:   forecast horizon in trading days.
+    cot_raw:   optional dict from cot.fetch_all_cot() — {ticker → weekly DataFrame}.
+               If None or empty, COT features are omitted (backward compatible).
 
     Returns
     -------
@@ -110,6 +114,15 @@ def build_pooled_dataset(
     # ── Cross-asset features (all N assets together) ─────────────────────────
     cross_feats = build_cross_features(prices, metals, ref_index)
 
+    # ── COT features (per-asset positioning data) ─────────────────────────────
+    use_cot = bool(cot_raw)
+    if use_cot:
+        cot_feats = build_cot_features(cot_raw, metals, ref_index)
+        cross_cot_feats = build_cross_cot_features(cot_feats, metals, ref_index)
+        logger.info("COT features enabled: 6 per-asset + 2 cross-sectional columns added.")
+    else:
+        logger.info("COT features disabled (cot_raw is None or empty).")
+
     # ── Per-asset own features + target ──────────────────────────────────────
     asset_dfs: list[pd.DataFrame] = []
 
@@ -149,14 +162,15 @@ def build_pooled_dataset(
         if ticker in onehot_map:
             onehot[onehot_map[ticker]] = 1.0
 
-        # Assemble all feature columns + macro + target
-        df = (
-            own_feats
-            .join(cross, how="left")
-            .join(macro_feats, how="left")
-            .join(onehot, how="left")
-            .join(target.reindex(ref_index), how="left")
-        )
+        # Assemble all feature columns + macro + (COT if enabled) + target
+        df = own_feats.join(cross, how="left").join(macro_feats, how="left")
+        if use_cot:
+            df = (
+                df
+                .join(cot_feats[ticker].reindex(ref_index), how="left")
+                .join(cross_cot_feats[ticker].reindex(ref_index), how="left")
+            )
+        df = df.join(onehot, how="left").join(target.reindex(ref_index), how="left")
 
         # Tag with asset label
         df.index.name = "date"

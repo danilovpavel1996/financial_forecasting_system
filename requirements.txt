@@ -8,6 +8,7 @@ scikit-learn==1.6.1
 yfinance==0.2.61
 fredapi==0.5.2
 pandas-datareader==0.10.0
+cot_reports>=0.4
 
 # Models
 lightgbm==4.6.0

@@ -15,6 +15,7 @@ import numpy as np
 
 from src.config import Config
 from src.data import universe
+from src.data.cot import fetch_all_cot
 from src.data.macro import fetch_all_series
 from src.data.prices import fetch_all_tickers
 from src.eval.rank_backtester import (
@@ -69,8 +70,27 @@ def run_ranking_pipeline(
         force_refresh=False,
     )
 
+    # ── Fetch COT data (if configured) ──────────────────────────────────────
+    cot_raw = None
+    cftc_cfg = cfg.cftc
+    if cftc_cfg and cftc_cfg.get("codes"):
+        logger.info("Fetching COT data for %d tickers ...", len(cftc_cfg["codes"]))
+        try:
+            cot_raw = fetch_all_cot(
+                codes=cftc_cfg["codes"],
+                start=cfg.dates["start"],
+                end=cfg.dates["end"],
+                cache_dir=cfg.paths.data_raw,
+                report_type=cftc_cfg.get("report_type", "disaggregated_fut"),
+                force_refresh=force_refresh,
+            )
+            logger.info("COT data loaded for %d tickers.", len(cot_raw))
+        except Exception as exc:
+            logger.warning("COT fetch failed (%s) — proceeding without COT features.", exc)
+            cot_raw = None
+
     # ── Build pooled dataset ─────────────────────────────────────────────────
-    pooled = build_pooled_dataset(cfg, prices, macro_raw, horizon=horizon)
+    pooled = build_pooled_dataset(cfg, prices, macro_raw, horizon=horizon, cot_raw=cot_raw)
 
     fcols = feature_cols(pooled)
     n_feats = len(fcols)

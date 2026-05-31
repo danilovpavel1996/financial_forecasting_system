@@ -24,6 +24,7 @@ load_dotenv()  # reads .env into os.environ
 
 from src.config import load_config
 from src.data import universe
+from src.data.cot import fetch_all_cot
 from src.data.macro import fetch_all_series
 from src.data.prices import fetch_all_tickers
 
@@ -44,6 +45,7 @@ def parse_args() -> argparse.Namespace:
 def print_summary(
     prices: dict,
     macro: dict,
+    cot: dict | None = None,
 ) -> None:
     print("\n" + "=" * 60)
     print("FETCH SUMMARY")
@@ -67,6 +69,16 @@ def print_summary(
             f"  {sid:<12} {len(s):>6}  {len(valid):>8}  "
             f"{str(s.index.min().date()):<12} {str(s.index.max().date()):<12}"
         )
+
+    if cot:
+        print(f"\nCOT series ({len(cot)} tickers):")
+        print(f"  {'Ticker':<8} {'Weeks':>6}  {'Start':<12} {'End':<12}")
+        print(f"  {'-'*8} {'-'*6}  {'-'*12} {'-'*12}")
+        for ticker, df in sorted(cot.items()):
+            print(
+                f"  {ticker:<8} {len(df):>6}  "
+                f"{str(df.index.min().date()):<12} {str(df.index.max().date()):<12}"
+            )
 
     print("\nAll data cached to data/raw/")
     print("=" * 60 + "\n")
@@ -97,7 +109,23 @@ def main() -> None:
 
     macro = fetch_all_series(series_ids, start, end, cache_dir, api_key=api_key, force_refresh=args.refresh)
 
-    print_summary(prices, macro)
+    cot_data = None
+    cftc_cfg = cfg.cftc
+    if cftc_cfg and cftc_cfg.get("codes"):
+        logger.info("Fetching COT data for %d tickers ...", len(cftc_cfg["codes"]))
+        try:
+            cot_data = fetch_all_cot(
+                codes=cftc_cfg["codes"],
+                start=start,
+                end=end,
+                cache_dir=cache_dir,
+                report_type=cftc_cfg.get("report_type", "disaggregated_fut"),
+                force_refresh=args.refresh,
+            )
+        except Exception as exc:
+            logger.error("COT fetch failed: %s", exc)
+
+    print_summary(prices, macro, cot_data)
 
 
 if __name__ == "__main__":

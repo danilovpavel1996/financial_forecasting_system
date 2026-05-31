@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 import yaml
 
@@ -40,6 +40,7 @@ class Config:
     splitter: SplitterConfig
     random_seed: int
     paths: PathsConfig
+    cftc: Dict = field(default_factory=dict)  # {"report_type": ..., "codes": {...}}
 
     def all_price_tickers(self) -> List[str]:
         """Return the flat list of all price tickers (metals + ETFs + macro context)."""
@@ -82,6 +83,7 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
         splitter=splitter,
         random_seed=int(raw["random_seed"]),
         paths=paths,
+        cftc=raw.get("cftc", {}),
     )
 
     _validate_config(cfg)

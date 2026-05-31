@@ -52,6 +52,19 @@ splitter:
 
 random_seed: 42
 
+cftc:
+  report_type: "disaggregated_fut"
+  codes:
+    "GC=F": "088691"    # Gold - COMEX
+    "SI=F": "084691"    # Silver - COMEX
+    "PL=F": "076651"    # Platinum - NYMEX
+    "PA=F": "075651"    # Palladium - NYMEX
+    "CL=F": "067651"    # Crude Oil WTI - NYMEX
+    "NG=F": "023651"    # Natural Gas - NYMEX
+    "HG=F": "085692"    # Copper - COMEX
+    "ZC=F": "002602"    # Corn - CBOT
+    "ZS=F": "005602"    # Soybeans - CBOT
+
 paths:
   data_raw: "data/raw"
   data_processed: "data/processed"
