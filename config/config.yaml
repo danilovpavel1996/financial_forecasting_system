@@ -65,6 +65,11 @@ cftc:
     "ZC=F": "002602"    # Corn - CBOT
     "ZS=F": "005602"    # Soybeans - CBOT
 
+live:
+  retrain_staleness_days: 7    # retrain model if older than this
+  default_horizon: 5           # default forecast horizon
+  signal_output_dir: "outputs/signals"
+
 vol_targeting:
   target_vol: 0.10          # annualized target portfolio vol (10%)
   max_leverage: 2.0         # position scale clip upper bound
