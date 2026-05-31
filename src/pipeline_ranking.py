@@ -37,6 +37,10 @@ def run_ranking_pipeline(
     cfg: Config,
     horizon: int,
     force_refresh: bool = False,
+    use_cot: bool = True,
+    vol_target: float | None = None,
+    max_leverage: float = 2.0,
+    vol_lookback: int = 21,
 ) -> Dict[str, RankingResult]:
     """Build pooled dataset and run walk-forward ranking backtest.
 
@@ -70,10 +74,10 @@ def run_ranking_pipeline(
         force_refresh=False,
     )
 
-    # ── Fetch COT data (if configured) ──────────────────────────────────────
+    # ── Fetch COT data (if configured and enabled) ──────────────────────────
     cot_raw = None
     cftc_cfg = cfg.cftc
-    if cftc_cfg and cftc_cfg.get("codes"):
+    if use_cot and cftc_cfg and cftc_cfg.get("codes"):
         logger.info("Fetching COT data for %d tickers ...", len(cftc_cfg["codes"]))
         try:
             cot_raw = fetch_all_cot(
@@ -121,6 +125,9 @@ def run_ranking_pipeline(
         assets=sorted(ranked),
         n_long=n_long,
         n_short=n_short,
+        vol_target=vol_target,
+        max_leverage=max_leverage,
+        vol_lookback=vol_lookback,
     )
 
     rng_seed = cfg.random_seed

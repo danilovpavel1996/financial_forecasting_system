@@ -41,6 +41,7 @@ from src.eval.cross_metrics import (
     std_cs_ric,
 )
 from src.eval.splitter import WalkForwardSplitter
+from src.eval.vol_targeting import PortfolioVolTargeter
 
 logger = logging.getLogger(__name__)
 
@@ -97,11 +98,12 @@ class RankingResult:
     model_name: str
     cs_ric_ts: pd.Series           # per-date CS-RIC
     ls_pnl_ts: pd.Series           # per-date net L/S P&L (after costs)
-    pos_df: pd.DataFrame           # date × asset positions (+1/0/-1)
+    pos_df: pd.DataFrame           # date × asset scaled positions
     pred_df: pd.DataFrame          # date × asset predictions
     real_df: pd.DataFrame          # date × asset realized returns
     n_folds: int
     horizon: int = 1               # forecast horizon for non-overlapping Sharpe
+    vol_scale_ts: pd.Series | None = None   # per-date position scale factor
 
     # ── Derived scalars (computed once at build time) ─────────────────────
     mean_cs_ric: float = field(init=False)
@@ -138,13 +140,17 @@ class RankingBacktester:
 
     Parameters
     ----------
-    splitter:  WalkForwardSplitter operating on the unique-date axis.
-    cost_bps:  round-trip transaction cost in basis points per position change.
-    horizon:   forecast horizon in trading days.  Used for non-overlapping
-               Sharpe calculation when horizon > 1.
-    assets:    ordered list of asset labels (must match pooled_df's asset level).
-    n_long:    number of assets to go long (highest predicted returns).
-    n_short:   number of assets to go short (lowest predicted returns).
+    splitter:      WalkForwardSplitter operating on the unique-date axis.
+    cost_bps:      round-trip transaction cost in basis points per position change.
+    horizon:       forecast horizon in trading days.  Used for non-overlapping
+                   Sharpe calculation when horizon > 1.
+    assets:        ordered list of asset labels (must match pooled_df's asset level).
+    n_long:        number of assets to go long (highest predicted returns).
+    n_short:       number of assets to go short (lowest predicted returns).
+    vol_target:    annualized target portfolio vol (e.g. 0.10 = 10%).
+                   None (default) disables vol targeting → fixed ±1 positions.
+    max_leverage:  position scale clip upper bound (default 2.0).
+    vol_lookback:  trailing days for realized vol estimate (default 21).
     """
 
     splitter: WalkForwardSplitter
@@ -153,6 +159,9 @@ class RankingBacktester:
     assets: list[str]
     n_long: int = 1
     n_short: int = 1
+    vol_target: float | None = None
+    max_leverage: float = 2.0
+    vol_lookback: int = 21
 
     def run(
         self,
@@ -187,9 +196,21 @@ class RankingBacktester:
         all_real: dict[str, list[float]] = {a: [] for a in self.assets}
         all_pos: dict[str, list[float]] = {a: [] for a in self.assets}
         all_net_pnl: list[float] = []
+        all_vol_scale: list[float] = []
         n_folds_used = 0
 
         prev_pos = {a: 0.0 for a in self.assets}
+
+        # Vol targeter (stateful; accumulates P&L across folds)
+        vol_targeter = (
+            PortfolioVolTargeter(
+                target_vol=self.vol_target,
+                max_leverage=self.max_leverage,
+                lookback_days=self.vol_lookback,
+            )
+            if self.vol_target is not None
+            else None
+        )
 
         for k, (train_dpos, test_dpos) in enumerate(folds):
             train_dates = unique_dates[train_dpos]
@@ -238,6 +259,12 @@ class RankingBacktester:
                 )
                 new_pos = {a: new_pos_arr[i] for i, a in enumerate(self.assets)}
 
+                # ── Vol targeting: scale positions before computing P&L ──────
+                vol_scale = 1.0
+                if vol_targeter is not None:
+                    vol_scale = vol_targeter.scale_factor()
+                    new_pos = {a: v * vol_scale for a, v in new_pos.items()}
+
                 # ── P&L and cost ────────────────────────────────────────────
                 gross = self.n_long + self.n_short
                 gross_pnl = sum(new_pos[a] * y_date[i]
@@ -249,9 +276,14 @@ class RankingBacktester:
                 cost_t = turnover_t * (self.cost_bps / 1e4)
                 net_pnl_t = norm_pnl - cost_t
 
+                # ── Update vol targeter with realized (scaled) P&L ──────────
+                if vol_targeter is not None:
+                    vol_targeter.update(net_pnl_t)
+
                 # ── Accumulate ──────────────────────────────────────────────
                 all_dates.append(date)
                 all_net_pnl.append(net_pnl_t)
+                all_vol_scale.append(vol_scale)
                 for i, a in enumerate(self.assets):
                     all_pred[a].append(float(pred[i]))
                     all_real[a].append(float(y_date[i]))
@@ -268,6 +300,8 @@ class RankingBacktester:
         real_df = pd.DataFrame(all_real, index=idx)
         pos_df  = pd.DataFrame(all_pos,  index=idx)
         pnl_ts  = pd.Series(all_net_pnl, index=idx, name="net_pnl")
+        vol_scale_ts = pd.Series(all_vol_scale, index=idx, name="vol_scale") \
+            if (all_vol_scale and self.vol_target is not None) else None
 
         cs_ric = cs_ric_series(pred_df, real_df)
 
@@ -280,6 +314,7 @@ class RankingBacktester:
             real_df=real_df,
             n_folds=n_folds_used,
             horizon=self.horizon,
+            vol_scale_ts=vol_scale_ts,
         )
 
 

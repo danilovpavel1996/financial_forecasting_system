@@ -46,19 +46,46 @@ def main() -> None:
                         help="Forecast horizon in trading days (default: 1)")
     parser.add_argument("--refresh", action="store_true",
                         help="Force re-fetch and rebuild data")
+    parser.add_argument("--no-cot", action="store_true",
+                        help="Disable COT features (revert to Phase 8 baseline)")
+    parser.add_argument("--vol-target", type=float, default=None,
+                        help="Annualized target portfolio vol (e.g. 0.10 = 10%)")
+    parser.add_argument("--max-leverage", type=float, default=2.0,
+                        help="Maximum position scale factor (default: 2.0)")
     args = parser.parse_args()
 
     cfg = load_config()
-    logger.info("Running ranking pipeline — horizon=%d", args.horizon)
+    logger.info(
+        "Running ranking pipeline — horizon=%d, cot=%s, vol_target=%s",
+        args.horizon, not args.no_cot, args.vol_target,
+    )
 
     results = run_ranking_pipeline(
-        cfg, horizon=args.horizon, force_refresh=args.refresh
+        cfg,
+        horizon=args.horizon,
+        force_refresh=args.refresh,
+        use_cot=not args.no_cot,
+        vol_target=args.vol_target,
+        max_leverage=args.max_leverage,
     )
 
     tbl = ranking_comparison_table(results)
-    print(f"\n=== Ranking Comparison Table  (horizon={args.horizon}) ===")
+    label = f"horizon={args.horizon}"
+    if args.vol_target:
+        label += f", vol_target={args.vol_target:.0%}"
+    if args.no_cot:
+        label += ", no_cot"
+    print(f"\n=== Ranking Comparison Table  ({label}) ===")
     print(tbl.to_string())
     print()
+
+    # Print realized vol for vol-targeted runs
+    if args.vol_target:
+        print("Realized ann_vol per model (target: {:.0%}):".format(args.vol_target))
+        for name, r in results.items():
+            if np.isfinite(r.ls_ann_vol):
+                print(f"  {name}: {r.ls_ann_vol:.1%}")
+        print()
 
     for name, r in results.items():
         if np.isfinite(r.mean_cs_ric) and abs(r.mean_cs_ric) > _CSRIC_LEAKAGE:

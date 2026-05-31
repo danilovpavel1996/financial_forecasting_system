@@ -40,7 +40,7 @@ dates:
   start: "2010-01-01"
   end: "2024-12-31"
 
-horizon: 1          # forecast horizon in trading days (target: forward return at t+horizon)
+horizon: 5          # forecast horizon in trading days (target: forward return at t+horizon)
 
 cost_bps: 5         # round-trip transaction cost in basis points
 
@@ -64,6 +64,11 @@ cftc:
     "HG=F": "085692"    # Copper - COMEX
     "ZC=F": "002602"    # Corn - CBOT
     "ZS=F": "005602"    # Soybeans - CBOT
+
+vol_targeting:
+  target_vol: 0.10          # annualized target portfolio vol (10%)
+  max_leverage: 2.0         # position scale clip upper bound
+  lookback_days: 21         # trailing window for realized vol estimate
 
 paths:
   data_raw: "data/raw"
