@@ -82,3 +82,23 @@ paths:
   outputs_figures: "outputs/figures"
   outputs_reports: "outputs/reports"
   outputs_models: "outputs/models"
+
+# Phase 16: equity sector universe — parallel to the commodity universe above.
+# The 9 original SPDR sector ETFs with history back to 1998.
+equity_sectors:
+  ranked_assets:
+    - "XLB"    # Materials
+    - "XLE"    # Energy
+    - "XLF"    # Financials
+    - "XLI"    # Industrials
+    - "XLK"    # Technology
+    - "XLP"    # Consumer Staples
+    - "XLU"    # Utilities
+    - "XLV"    # Health Care
+    - "XLY"    # Consumer Discretionary
+  context:
+    - "SPY"
+    - "TLT"
+    - "UUP"
+    - "^VIX"
+  start_date: "1999-01-01"

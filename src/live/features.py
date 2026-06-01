@@ -33,6 +33,10 @@ def build_live_features(
     cfg: Config,
     live_data: LiveData,
     use_cot: bool = False,
+    ranked_override: list[str] | None = None,
+    context_override: list[str] | None = None,
+    late_close_override: set[str] | None = None,
+    ref_ticker_override: str | None = None,
 ) -> dict[str, pd.Series]:
     """Build today's feature vector for every ranked asset.
 
@@ -44,20 +48,40 @@ def build_live_features(
 
     Parameters
     ----------
-    cfg:       project config.
-    live_data: output of fetch_live_data().
-    use_cot:   include COT features (must match training config).
+    cfg:                project config.
+    live_data:          output of fetch_live_data().
+    use_cot:            include COT features (must match training config).
+    ranked_override:    override the ranked tickers list.
+    context_override:   override the context tickers list.
+    late_close_override: override the late-close tickers set.
+    ref_ticker_override: override the reference calendar ticker.
     """
-    ranked = universe.ranked_tickers(cfg)
+    if ranked_override is not None:
+        ranked = ranked_override
+    else:
+        ranked = universe.ranked_tickers(cfg)
+
     metals_set = set(ranked)
-    late_close = set(universe.equity_context_tickers(cfg))
-    context_tickers = [t for t in universe.price_tickers(cfg) if t not in metals_set]
+
+    if late_close_override is not None:
+        late_close = late_close_override
+    else:
+        late_close = set(universe.equity_context_tickers(cfg))
+
+    if context_override is not None:
+        context_tickers = [t for t in context_override if t not in metals_set]
+    else:
+        context_tickers = [t for t in universe.price_tickers(cfg) if t not in metals_set]
+
     prices = live_data.prices
 
-    # Reference calendar from GC=F (gold futures, most complete)
-    if "GC=F" not in prices:
-        raise RuntimeError("GC=F price data missing — cannot build live features.")
-    ref_index: pd.DatetimeIndex = prices["GC=F"].index
+    # Reference calendar: use override ticker, fall back to GC=F, or first ranked asset
+    _ref = ref_ticker_override or "GC=F"
+    if _ref not in prices:
+        _ref = ranked[0] if ranked else None
+    if _ref is None or _ref not in prices:
+        raise RuntimeError("Reference ticker not in prices — cannot build live features.")
+    ref_index: pd.DatetimeIndex = prices[_ref].index
 
     # ── Common features (same for all assets on the same date) ───────────────
     macro_feats = build_macro_features(live_data.macro_raw, trading_index=ref_index)
@@ -122,9 +146,9 @@ def build_live_features(
     return result
 
 
-def get_feature_date(live_features: dict[str, pd.Series], ref_ticker: str = "GC=F") -> pd.Timestamp:
+def get_feature_date(live_features: dict[str, pd.Series], ref_ticker: str | None = None) -> pd.Timestamp:
     """Return the index date of the live feature row (the 'as-of' date)."""
-    if ref_ticker in live_features:
+    if ref_ticker and ref_ticker in live_features:
         return live_features[ref_ticker].name
     if live_features:
         return next(iter(live_features.values())).name

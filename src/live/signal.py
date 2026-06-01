@@ -41,6 +41,16 @@ _NAMES: dict[str, str] = {
     "HG=F": "Copper",
     "ZC=F": "Corn",
     "ZS=F": "Soybeans",
+    # Equity sector ETFs
+    "XLB": "Materials",
+    "XLE": "Energy",
+    "XLF": "Financials",
+    "XLI": "Industrials",
+    "XLK": "Technology",
+    "XLP": "Staples",
+    "XLU": "Utilities",
+    "XLV": "Health Care",
+    "XLY": "Cons. Disc.",
 }
 
 # Position thresholds (top-2 long, bottom-2 short out of 9)
@@ -89,6 +99,10 @@ def generate_signal(
     backtest_sharpe: float = 0.63,
     backtest_cs_ric: float = 0.020,
     vol_target: Optional[float] = 0.10,
+    ranked_override: Optional[list[str]] = None,
+    context_override: Optional[list[str]] = None,
+    late_close_override: Optional[set[str]] = None,
+    ref_ticker_override: Optional[str] = None,
 ) -> LiveSignal:
     """Build today's ranked signal for all 9 commodities.
 
@@ -103,11 +117,17 @@ def generate_signal(
     backtest_sharpe/cs_ric: from the most recent walk-forward backtest.
     vol_target:     for vol-targeting scale computation (None = no targeting).
     """
-    ranked = universe.ranked_tickers(cfg)
+    ranked = ranked_override if ranked_override is not None else universe.ranked_tickers(cfg)
     prices = live_data.prices
 
     # ── Build live feature vectors ────────────────────────────────────────────
-    live_feats = build_live_features(cfg, live_data, use_cot=use_cot)
+    live_feats = build_live_features(
+        cfg, live_data, use_cot=use_cot,
+        ranked_override=ranked_override,
+        context_override=context_override,
+        late_close_override=late_close_override,
+        ref_ticker_override=ref_ticker_override,
+    )
     if not live_feats:
         raise RuntimeError("No live features could be built — check data availability.")
 

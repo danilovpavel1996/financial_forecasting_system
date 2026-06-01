@@ -41,6 +41,7 @@ class Config:
     random_seed: int
     paths: PathsConfig
     cftc: Dict = field(default_factory=dict)  # {"report_type": ..., "codes": {...}}
+    equity_sectors: Dict = field(default_factory=dict)  # Phase 16 equity sector universe
 
     def all_price_tickers(self) -> List[str]:
         """Return the flat list of all price tickers (metals + ETFs + macro context)."""
@@ -84,6 +85,7 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
         random_seed=int(raw["random_seed"]),
         paths=paths,
         cftc=raw.get("cftc", {}),
+        equity_sectors=raw.get("equity_sectors", {}),
     )
 
     _validate_config(cfg)

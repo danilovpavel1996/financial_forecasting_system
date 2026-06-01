@@ -71,6 +71,32 @@ def macro_context_tickers(cfg: Config) -> List[str]:
     return list(cfg.universe.get("macro_context", []))
 
 
+def sector_tickers(cfg: Config) -> List[str]:
+    """Flat list of equity sector ETF tickers from the equity_sectors config section."""
+    return list(cfg.equity_sectors.get("ranked_assets", []))
+
+
+def sector_context_tickers(cfg: Config) -> List[str]:
+    """Context tickers for the equity sector universe."""
+    return list(cfg.equity_sectors.get("context", []))
+
+
+def sector_price_tickers(cfg: Config) -> List[str]:
+    """All price tickers needed for the equity sector pipeline, deduplicated."""
+    seen: set = set()
+    tickers: List[str] = []
+    for t in sector_tickers(cfg) + sector_context_tickers(cfg):
+        if t not in seen:
+            tickers.append(t)
+            seen.add(t)
+    return tickers
+
+
+def sector_start_date(cfg: Config) -> str:
+    """Historical start date for the equity sector universe."""
+    return cfg.equity_sectors.get("start_date", cfg.dates["start"])
+
+
 def equity_context_tickers(cfg: Config) -> List[str]:
     """Equity-market tickers (ETFs + macro context) that close at 4pm ET.
 

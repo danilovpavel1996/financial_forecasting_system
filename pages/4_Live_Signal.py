@@ -1,4 +1,4 @@
-"""Live Signal page — today's commodity ranking with real-time data."""
+"""Live Signal page — today's commodity or equity sector ranking."""
 from __future__ import annotations
 
 import json
@@ -189,10 +189,22 @@ st.set_page_config(
 
 with st.sidebar:
     st.title("📊 Forecast Research")
-    st.caption("Daily commodity ranking system")
+    st.divider()
+    universe_choice = st.radio(
+        "Universe",
+        ["Commodities", "Equity Sectors"],
+        index=0,
+        help=(
+            "Commodities: 9 futures (GC=F, SI=F, PL=F, PA=F, CL=F, NG=F, HG=F, ZC=F, ZS=F)\n\n"
+            "Equity Sectors: 9 SPDR ETFs (XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY)"
+        ),
+    )
     st.divider()
     horizon = st.select_slider("Horizon (trading days)", [1, 5, 10, 21, 63], value=63)
-    model_choice = st.radio("Model", ["MeanReversion", "LightGBM", "Ensemble"], index=0)
+    _model_options = ["MeanReversion", "LightGBM", "Ensemble"]
+    if universe_choice == "Equity Sectors":
+        _model_options = ["MeanReversion", "LightGBM"]  # Ensemble mode is commodities-only for now
+    model_choice = st.radio("Model", _model_options, index=0)
     if model_choice == "Ensemble":
         w_short = st.slider("Ensemble: weight h=5 (MeanRev)", 0.0, 1.0, 0.35, step=0.05,
                             help="Weight on h=5 MeanReversion; h=63 LightGBM gets the remainder")
@@ -223,15 +235,121 @@ cfg = _load_cfg()
 
 # ── Run signal generation ─────────────────────────────────────────────────────
 
-def _generate(horizon, model_name, retrain, refresh, w_short=0.35, w_long=0.65):
+def _generate(horizon, model_name, retrain, refresh, w_short=0.35, w_long=0.65,
+              universe_name="Commodities"):
     from src.live.data import fetch_live_data
     from src.live.signal import generate_signal
     from src.live.trainer import load_latest_model, model_is_stale, train_live_model
 
+    is_sectors = (universe_name == "Equity Sectors")
+
+    if is_sectors:
+        # Fetch sector ETF prices with sector start date
+        import datetime, os
+        from src.data.prices import fetch_all_tickers
+        from src.data.macro import fetch_all_series
+
+        today = datetime.date.today()
+        end_prices = (today + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        end_date   = today.strftime("%Y-%m-%d")
+        start_date = universe.sector_start_date(cfg)
+
+        live_cache = cfg.paths.data_raw.parent / "live" / end_date
+        live_cache.mkdir(parents=True, exist_ok=True)
+
+        sector_tkrs  = universe.sector_tickers(cfg)
+        context_tkrs = universe.sector_context_tickers(cfg)
+        all_tkrs     = universe.sector_price_tickers(cfg)
+
+        prices = fetch_all_tickers(all_tkrs, start_date, end_prices, live_cache,
+                                   force_refresh=refresh)
+        macro_raw: dict = {}
+        api_key = os.environ.get("FRED_API_KEY", "").strip()
+        if api_key:
+            try:
+                macro_raw = fetch_all_series(
+                    universe.fred_series(cfg), start_date, end_date, live_cache,
+                    api_key=api_key, force_refresh=refresh,
+                )
+            except Exception as exc:
+                st.warning(f"Macro fetch failed: {exc}")
+
+        from src.live.data import LiveData
+        live_data = LiveData(
+            prices=prices, macro_raw=macro_raw, cot_raw={},
+            as_of=today, start=start_date, end=end_date,
+        )
+
+        # Sector-specific overrides
+        _ranked_override      = sector_tkrs
+        _context_override     = context_tkrs
+        _late_close_override  = set()          # all ETFs close at 4pm ET
+        _ref_ticker_override  = sector_tkrs[0] # e.g., XLB
+
+        # LightGBM for sectors: train on sector pooled dataset
+        trained_model = None
+        if model_name == "LightGBM":
+            from src.features.pooled_dataset import build_pooled_dataset, feature_cols
+            from src.models.gbm import LightGBMModel
+            import numpy as _np
+
+            existing = load_latest_model(cfg)
+            sector_model_path = cfg.paths.outputs_models / "live_lgbm_sectors_latest.pkl"
+            needs_train = retrain or not sector_model_path.exists()
+
+            if needs_train:
+                with st.spinner("Training LightGBM on sector history…"):
+                    import joblib, datetime as _dt
+                    pooled = build_pooled_dataset(
+                        cfg, live_data.prices, live_data.macro_raw, horizon=horizon,
+                        cot_raw=None,
+                        ranked_override=_ranked_override,
+                        context_override=_context_override,
+                        ref_ticker_override=_ref_ticker_override,
+                        late_close_override=_late_close_override,
+                        carry_pairs_override={},
+                    )
+                    fcols = feature_cols(pooled)
+                    X = pooled[fcols].values.astype(float)
+                    y = pooled["target"].values.astype(float)
+                    ok = _np.isfinite(y) & _np.all(_np.isfinite(X), axis=1)
+                    model = LightGBMModel(random_state=cfg.random_seed)
+                    model.fit(X[ok], y[ok])
+                    ts = _dt.datetime.now()
+                    payload = {"model": model, "feature_cols": fcols,
+                               "trained_at": ts, "horizon": horizon, "n_rows": int(ok.sum())}
+                    sector_model_path.parent.mkdir(parents=True, exist_ok=True)
+                    joblib.dump(payload, sector_model_path)
+                    from src.live.trainer import TrainedModel
+                    trained_model = TrainedModel(
+                        model=model, feature_cols=fcols, trained_at=ts,
+                        horizon=horizon, n_rows=int(ok.sum()), path=sector_model_path,
+                    )
+            else:
+                import joblib
+                payload = joblib.load(sector_model_path)
+                from src.live.trainer import TrainedModel
+                trained_model = TrainedModel(
+                    model=payload["model"], feature_cols=payload["feature_cols"],
+                    trained_at=payload["trained_at"], horizon=payload["horizon"],
+                    n_rows=payload["n_rows"], path=sector_model_path,
+                )
+
+        return generate_signal(
+            cfg=cfg, live_data=live_data, trained_model=trained_model,
+            horizon=horizon, model_name=model_name, use_cot=False,
+            backtest_sharpe=float("nan"), backtest_cs_ric=float("nan"),
+            vol_target=0.10,
+            ranked_override=_ranked_override,
+            context_override=_context_override,
+            late_close_override=_late_close_override,
+            ref_ticker_override=_ref_ticker_override,
+        ), live_data
+
+    # ── Commodity universe (existing logic, unchanged) ────────────────────────
     live_data = fetch_live_data(cfg, force_refresh=refresh, include_cot=False)
 
     if model_name == "Ensemble":
-        # Run both sub-signals
         mr_sig = generate_signal(
             cfg=cfg, live_data=live_data, trained_model=None,
             horizon=5, model_name="MeanReversion", use_cot=False,
@@ -279,8 +397,10 @@ if run_btn or train_btn:
             result = _generate(
                 horizon, model_choice, force_retrain or train_btn, force_refresh,
                 w_short=w_short, w_long=w_long,
+                universe_name=universe_choice,
             )
             st.session_state.live_signal = result
+            st.session_state.live_universe = universe_choice
             st.success("Signal updated!")
         except Exception as exc:
             st.error(f"Signal generation failed: {exc}")
@@ -288,19 +408,24 @@ if run_btn or train_btn:
 
 # ── Display ───────────────────────────────────────────────────────────────────
 
-st.title("🚦 Live Signal")
+_live_universe = st.session_state.get("live_universe", "Commodities")
+st.title(f"🚦 Live Signal — {_live_universe}")
 
 if st.session_state.live_signal is None:
     st.info("Click **🚦 Refresh Signal** in the sidebar to generate today's ranking.")
     st.markdown("""
 **What this page shows:**
-- Today's cross-sectional ranking of the 9 commodities based on the selected model
+- Today's cross-sectional ranking of 9 assets based on the selected model and universe
 - LONG = top-2 predicted forward returns, SHORT = bottom-2, FLAT = middle 5
 - The MeanReversion model ranks by **negative 5-day trailing return** (mean-reversion heuristic)
 - Features use yesterday's closes — same exact code path as the backtest
-- **Ensemble mode** combines h=5 MeanReversion + h=63 LightGBM with configurable weights
+- **Ensemble mode** (Commodities only) combines h=5 MeanReversion + h=63 LightGBM
 
+**Commodities universe:** GC=F, SI=F, PL=F, PA=F, CL=F, NG=F, HG=F, ZC=F, ZS=F
 *Phase 14 out-of-sample Sharpe: 0.79 (h=63, LightGBM no-COT, 2005–2024)*
+
+**Equity Sectors universe:** XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY
+*Phase 16 sweep results: see outputs/reports/phase16_sweep.md after running scripts/run_sweep_sectors.py*
 """)
     st.stop()
 

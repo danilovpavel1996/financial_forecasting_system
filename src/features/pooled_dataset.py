@@ -56,17 +56,27 @@ def build_pooled_dataset(
     macro_raw: dict[str, pd.Series],
     horizon: int,
     cot_raw: dict[str, pd.DataFrame] | None = None,
+    ranked_override: list[str] | None = None,
+    context_override: list[str] | None = None,
+    ref_ticker_override: str | None = None,
+    late_close_override: set[str] | None = None,
+    carry_pairs_override: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """Build the pooled (date × asset) feature + target DataFrame.
 
     Parameters
     ----------
-    cfg:       project config (for late-close tickers, random seed, paths).
-    prices:    dict mapping ticker → OHLCV DataFrame (all tickers loaded).
-    macro_raw: dict mapping FRED series ID → daily Series.
-    horizon:   forecast horizon in trading days.
-    cot_raw:   optional dict from cot.fetch_all_cot() — {ticker → weekly DataFrame}.
-               If None or empty, COT features are omitted (backward compatible).
+    cfg:                project config (for late-close tickers, random seed, paths).
+    prices:             dict mapping ticker → OHLCV DataFrame (all tickers loaded).
+    macro_raw:          dict mapping FRED series ID → daily Series.
+    horizon:            forecast horizon in trading days.
+    cot_raw:            optional dict from cot.fetch_all_cot() — {ticker → weekly DataFrame}.
+                        If None or empty, COT features are omitted (backward compatible).
+    ranked_override:    override the ranked tickers list (default: from cfg).
+    context_override:   override the context tickers list (default: from cfg).
+    ref_ticker_override: override the reference ticker for the trading calendar.
+    late_close_override: override the set of late-close tickers (pass set() for all-ETF universes).
+    carry_pairs_override: override carry pairs ({} disables carry_proxy, keeps basis_momentum).
 
     Returns
     -------
@@ -77,7 +87,7 @@ def build_pooled_dataset(
     Only dates where ALL N ranked assets have valid features AND a valid target
     are included; the final set is the intersection across all assets.
     """
-    metals = universe.ranked_tickers(cfg)
+    metals = ranked_override if ranked_override is not None else universe.ranked_tickers(cfg)
     if not metals:
         raise ValueError(
             "No ranked_assets configured in config.yaml. "
@@ -86,15 +96,26 @@ def build_pooled_dataset(
 
     n_assets = len(metals)
     metals_set = set(metals)
-    late_close = set(universe.equity_context_tickers(cfg))
-    context_tickers = [t for t in universe.price_tickers(cfg) if t not in metals_set]
+
+    if late_close_override is not None:
+        late_close = late_close_override
+    else:
+        late_close = set(universe.equity_context_tickers(cfg))
+
+    if context_override is not None:
+        context_tickers = [t for t in context_override if t not in metals_set]
+    else:
+        context_tickers = [t for t in universe.price_tickers(cfg) if t not in metals_set]
 
     # One-hot: N-1 indicator columns, last sorted ticker is reference category
     onehot_map = _build_onehot_map(metals)
     onehot_cols = list(onehot_map.values())
 
-    # ── Use GC=F's calendar as the shared reference ──────────────────────────
-    ref_index: pd.DatetimeIndex = prices["GC=F"].index
+    # Reference calendar: use override ticker, or fall back to GC=F
+    _ref_ticker = ref_ticker_override if ref_ticker_override is not None else "GC=F"
+    if _ref_ticker not in prices:
+        _ref_ticker = metals[0]
+    ref_index: pd.DatetimeIndex = prices[_ref_ticker].index
 
     # Log per-asset row counts to flag coverage issues
     for ticker in metals:
@@ -117,7 +138,10 @@ def build_pooled_dataset(
     seasonal_feats = build_seasonal_features(ref_index)
 
     # ── Carry / term-structure features (per-asset) ───────────────────────────
-    carry_feats = build_carry_features(prices, metals, ref_index)
+    carry_feats = build_carry_features(
+        prices, metals, ref_index,
+        carry_pairs=carry_pairs_override,  # None = use defaults; {} = basis_momentum only
+    )
 
     # ── Cross-asset features (all N assets together) ─────────────────────────
     cross_feats = build_cross_features(prices, metals, ref_index)
