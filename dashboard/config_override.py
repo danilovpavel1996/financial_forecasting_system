@@ -29,6 +29,7 @@ class RunConfig:
             max_leverage=self.max_leverage,
             vol_lookback=self.vol_lookback,
             force_refresh=self.force_refresh,
+            embargo=self.horizon,  # must equal horizon to prevent label leakage
         )
 
     def label(self) -> str:

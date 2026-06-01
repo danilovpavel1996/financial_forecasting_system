@@ -18,6 +18,165 @@ from src.config import load_config
 from src.data import universe
 from dashboard.charts import _COLOURS, _LAYOUT
 
+# ── Ensemble conviction colour ────────────────────────────────────────────────
+
+_POS_TO_SCORE = {"LONG": 1.0, "SHORT": -1.0, "FLAT": 0.0}
+
+# Colour constants used in both ensemble and single-signal views
+_AGREE_LONG  = "#2A9D8F"   # green
+_AGREE_SHORT = "#E76F51"   # red-orange
+_DISAGREE    = "#E9C46A"   # yellow
+_NEUTRAL     = "#888888"   # grey
+
+
+def _ensemble_conviction(h5_pos: str, h63_pos: str, w_short: float, w_long: float
+                         ) -> tuple[float, str, str]:
+    """Return (blended_score, display_position, hex_colour) for one asset."""
+    s5  = _POS_TO_SCORE.get(h5_pos,  0.0)
+    s63 = _POS_TO_SCORE.get(h63_pos, 0.0)
+    blend = w_short * s5 + w_long * s63
+
+    if h5_pos == "LONG"  and h63_pos == "LONG":
+        disp, colour = "LONG (both)",  _AGREE_LONG
+    elif h5_pos == "SHORT" and h63_pos == "SHORT":
+        disp, colour = "SHORT (both)", _AGREE_SHORT
+    elif blend > 0.05:
+        disp, colour = "LONG (lean)",  _DISAGREE
+    elif blend < -0.05:
+        disp, colour = "SHORT (lean)", _DISAGREE
+    else:
+        disp, colour = "FLAT",         _NEUTRAL
+
+    return blend, disp, colour
+
+
+def _render_ensemble(mr_sig, lgbm_sig, w_short: float, w_long: float, live_data) -> None:
+    """Render the ensemble dual-ranking view."""
+    # Header
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Signal date", str(mr_sig.date))
+    col2.metric("Features as of", str(mr_sig.feature_date))
+    col3.metric("Vol regime", mr_sig.confidence.current_vol_regime.upper())
+    col4.metric("Ensemble weights", f"h5={w_short:.0%} / h63={w_long:.0%}")
+
+    st.divider()
+
+    # Build lookup dicts: ticker → position string
+    mr_pos   = {r.ticker: r.position for r in mr_sig.rankings}
+    lgbm_pos = {r.ticker: r.position for r in lgbm_sig.rankings}
+    mr_pred   = {r.ticker: r.predicted_return for r in mr_sig.rankings}
+    lgbm_pred = {r.ticker: r.predicted_return for r in lgbm_sig.rankings}
+
+    # Side-by-side rankings + blended view
+    st.subheader("Ensemble View — Rankings Side by Side")
+
+    # Compute blended scores for all tickers (use MR ranking order)
+    all_tickers = [r.ticker for r in mr_sig.rankings]
+    blended_scores = {}
+    for tkr in all_tickers:
+        score, _, _ = _ensemble_conviction(
+            mr_pos.get(tkr, "FLAT"), lgbm_pos.get(tkr, "FLAT"), w_short, w_long
+        )
+        blended_scores[tkr] = score
+
+    # Sort by blended score descending
+    sorted_tickers = sorted(all_tickers, key=lambda t: blended_scores[t], reverse=True)
+
+    rows = []
+    for rank, tkr in enumerate(sorted_tickers, 1):
+        h5_p  = mr_pos.get(tkr, "FLAT")
+        h63_p = lgbm_pos.get(tkr, "FLAT")
+        blend, disp, _ = _ensemble_conviction(h5_p, h63_p, w_short, w_long)
+        rows.append({
+            "Rank": rank,
+            "Ticker": tkr,
+            "h=5 MeanRev": h5_p,
+            "h=63 LightGBM": h63_p,
+            "Blended Position": disp,
+            "Blend score": f"{blend:+.3f}",
+        })
+
+    tbl_df = pd.DataFrame(rows).set_index("Rank")
+
+    # Colour the blended position column
+    _BLEND_COLOURS = {
+        "LONG (both)":  f"color: {_AGREE_LONG};  font-weight: bold",
+        "SHORT (both)": f"color: {_AGREE_SHORT}; font-weight: bold",
+        "LONG (lean)":  f"color: {_DISAGREE};    font-weight: bold",
+        "SHORT (lean)": f"color: {_DISAGREE};    font-weight: bold",
+        "FLAT":         f"color: {_NEUTRAL}",
+    }
+    _H5_COLOURS  = {"LONG": f"color: {_AGREE_LONG}", "SHORT": f"color: {_AGREE_SHORT}", "FLAT": f"color: {_NEUTRAL}"}
+    _H63_COLOURS = {"LONG": f"color: {_AGREE_LONG}", "SHORT": f"color: {_AGREE_SHORT}", "FLAT": f"color: {_NEUTRAL}"}
+
+    def _colour_blend(val):
+        return _BLEND_COLOURS.get(str(val), "")
+
+    def _colour_sub(val):
+        return _H5_COLOURS.get(str(val), "")
+
+    styled = (
+        tbl_df.style
+        .applymap(_colour_blend, subset=["Blended Position"])
+        .applymap(_colour_sub,   subset=["h=5 MeanRev", "h=63 LightGBM"])
+    )
+    st.dataframe(styled, use_container_width=True)
+
+    # Legend
+    st.caption(
+        "🟢 LONG (both) = high conviction long  |  "
+        "🔴 SHORT (both) = high conviction short  |  "
+        "🟡 lean = signals disagree (reduced conviction)  |  "
+        "⚫ FLAT = no net signal"
+    )
+
+    # Price charts for high-conviction picks
+    high_conv = [r for r in rows if "both" in r["Blended Position"]]
+    if high_conv and live_data is not None:
+        st.divider()
+        st.subheader("Price charts — High-conviction picks (last 90 days)")
+        ncols = min(len(high_conv), 4)
+        cols = st.columns(ncols)
+        for i, r in enumerate(high_conv):
+            with cols[i % ncols]:
+                ticker = r["Ticker"]
+                if ticker not in live_data.prices:
+                    st.caption(f"{ticker}: no data")
+                    continue
+                close = live_data.prices[ticker]["Close"].dropna().tail(90)
+                colour = _AGREE_LONG if "LONG" in r["Blended Position"] else _AGREE_SHORT
+                fig = go.Figure(go.Scatter(
+                    x=close.index, y=close.values,
+                    mode="lines", line=dict(color=colour, width=2),
+                    hovertemplate="%{x|%Y-%m-%d}<br>$%{y:,.2f}<extra></extra>",
+                ))
+                fig.update_layout(
+                    **_LAYOUT,
+                    title=f"{ticker} ({r['Blended Position']})",
+                    showlegend=False,
+                    height=220,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("Ensemble context"):
+        st.markdown(f"""
+| Metric | Value |
+|--------|-------|
+| h=5 MeanReversion backtest Sharpe | {mr_sig.confidence.backtest_sharpe:.2f} |
+| h=63 LightGBM backtest Sharpe | {lgbm_sig.confidence.backtest_sharpe:.2f} |
+| Ensemble weights | h5={w_short:.0%} / h63={w_long:.0%} |
+| Vol regime | {mr_sig.confidence.current_vol_regime} |
+| h=63 model staleness | {lgbm_sig.confidence.days_since_retrain} day(s) |
+
+*Theoretical diversified Sharpe ≈ √(0.40² + 0.79²) ≈ 0.89 if signals are uncorrelated.*
+""")
+        st.caption(
+            "Blended score = w_short × h5_position + w_long × h63_position. "
+            "Positions are: LONG=+1, SHORT=-1, FLAT=0. "
+            "High-conviction = both sub-signals agree."
+        )
+
+
 # ── Page config ───────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -33,14 +192,21 @@ with st.sidebar:
     st.caption("Daily commodity ranking system")
     st.divider()
     horizon = st.select_slider("Horizon (trading days)", [1, 5, 10, 21, 63], value=63)
-    model_choice = st.radio("Model", ["MeanReversion", "LightGBM"], index=0)
+    model_choice = st.radio("Model", ["MeanReversion", "LightGBM", "Ensemble"], index=0)
+    if model_choice == "Ensemble":
+        w_short = st.slider("Ensemble: weight h=5 (MeanRev)", 0.0, 1.0, 0.35, step=0.05,
+                            help="Weight on h=5 MeanReversion; h=63 LightGBM gets the remainder")
+        w_long = round(1.0 - w_short, 2)
+        st.caption(f"h=5 weight: {w_short:.2f}  |  h=63 weight: {w_long:.2f}")
+    else:
+        w_short, w_long = 0.35, 0.65
     force_retrain = st.checkbox("Force retrain", value=False,
                                 help="Retrain LightGBM even if model is fresh")
     force_refresh = st.checkbox("Force data refresh", value=False,
                                 help="Re-fetch all data, bypass same-day cache")
     run_btn  = st.button("🚦 Refresh Signal",  type="primary", use_container_width=True)
     train_btn = st.button("🔁 Retrain Model", use_container_width=True,
-                          disabled=(model_choice != "LightGBM"))
+                          disabled=(model_choice not in ("LightGBM", "Ensemble")))
     st.divider()
     st.caption("⚠️ Research tooling — not investment advice.")
 
@@ -57,12 +223,33 @@ cfg = _load_cfg()
 
 # ── Run signal generation ─────────────────────────────────────────────────────
 
-def _generate(horizon, model_name, retrain, refresh):
+def _generate(horizon, model_name, retrain, refresh, w_short=0.35, w_long=0.65):
     from src.live.data import fetch_live_data
     from src.live.signal import generate_signal
     from src.live.trainer import load_latest_model, model_is_stale, train_live_model
 
     live_data = fetch_live_data(cfg, force_refresh=refresh, include_cot=False)
+
+    if model_name == "Ensemble":
+        # Run both sub-signals
+        mr_sig = generate_signal(
+            cfg=cfg, live_data=live_data, trained_model=None,
+            horizon=5, model_name="MeanReversion", use_cot=False,
+            backtest_sharpe=0.40, backtest_cs_ric=0.020, vol_target=0.10,
+        )
+        existing = load_latest_model(cfg)
+        needs_train = retrain or model_is_stale(existing, staleness_days=7)
+        if needs_train:
+            with st.spinner("Training LightGBM on full history…"):
+                lgbm_model = train_live_model(cfg, live_data, horizon=63, use_cot=False)
+        else:
+            lgbm_model = existing
+        lgbm_sig = generate_signal(
+            cfg=cfg, live_data=live_data, trained_model=lgbm_model,
+            horizon=63, model_name="LightGBM", use_cot=False,
+            backtest_sharpe=0.79, backtest_cs_ric=0.055, vol_target=0.10,
+        )
+        return (mr_sig, lgbm_sig, w_short, w_long), live_data
 
     trained_model = None
     if model_name == "LightGBM":
@@ -89,10 +276,11 @@ def _generate(horizon, model_name, retrain, refresh):
 if run_btn or train_btn:
     with st.spinner("Fetching live data and generating signal…"):
         try:
-            sig, live_data = _generate(
-                horizon, model_choice, force_retrain or train_btn, force_refresh
+            result = _generate(
+                horizon, model_choice, force_retrain or train_btn, force_refresh,
+                w_short=w_short, w_long=w_long,
             )
-            st.session_state.live_signal = (sig, live_data)
+            st.session_state.live_signal = result
             st.success("Signal updated!")
         except Exception as exc:
             st.error(f"Signal generation failed: {exc}")
@@ -110,12 +298,31 @@ if st.session_state.live_signal is None:
 - LONG = top-2 predicted forward returns, SHORT = bottom-2, FLAT = middle 5
 - The MeanReversion model ranks by **negative 5-day trailing return** (mean-reversion heuristic)
 - Features use yesterday's closes — same exact code path as the backtest
+- **Ensemble mode** combines h=5 MeanReversion + h=63 LightGBM with configurable weights
 
 *Phase 14 out-of-sample Sharpe: 0.79 (h=63, LightGBM no-COT, 2005–2024)*
 """)
     st.stop()
 
+_POS_COLOUR = {"LONG": "#2A9D8F", "SHORT": "#E76F51", "FLAT": "#888888"}
+
+# ── Detect ensemble vs single-signal mode ────────────────────────────────────
+
+_is_ensemble = (
+    isinstance(st.session_state.live_signal, tuple)
+    and len(st.session_state.live_signal) == 2
+    and isinstance(st.session_state.live_signal[0], tuple)
+    and len(st.session_state.live_signal[0]) == 4
+)
+
+if _is_ensemble:
+    (mr_sig, lgbm_sig, _w_short, _w_long), live_data = st.session_state.live_signal
+    _render_ensemble(mr_sig, lgbm_sig, _w_short, _w_long, live_data)
+    st.stop()
+
 sig, live_data = st.session_state.live_signal
+
+# ── Single-signal display ─────────────────────────────────────────────────────
 
 # Header metrics
 col1, col2, col3, col4 = st.columns(4)
@@ -129,8 +336,6 @@ st.divider()
 # ── Ranking table ─────────────────────────────────────────────────────────────
 
 st.subheader(f"Ranking — {sig.model_name}  (horizon={sig.horizon}d)")
-
-_POS_COLOUR = {"LONG": "#2A9D8F", "SHORT": "#E76F51", "FLAT": "#888888"}
 
 rows = []
 for r in sig.rankings:
