@@ -1,8 +1,11 @@
-"""Phase 17 Experiment A — Cross-asset ensemble: commodity h=63 LightGBM + equity h=63 MeanReversion.
+"""Phase 18 Upgrade — Cross-asset ensemble: commodity h=63 LightGBM + equity h=63 LightGBM PredAvg21.
 
-Approach (mirrors run_ensemble.py from Phase 15):
+Phase 17 used MeanReversion (Sharpe 0.35) for the equity leg.
+Phase 18 upgrades the equity leg to LightGBM + 21-day prediction averaging (B3, Sharpe 0.48).
+
+Approach:
   1. Run commodity h=63 LightGBM backtest (no COT, embargo=63)
-  2. Run equity sector h=63 MeanReversion backtest (embargo=63)
+  2. Run equity sector h=63 LightGBM + pred_avg_window=21 backtest (embargo=63)
   3. Align daily P&L to common date range
   4. Report correlation between the two P&L series
   5. Sweep weight combos: 100/0, 75/25, 50/50, 25/75, 0/100
@@ -15,7 +18,7 @@ Usage
 Output
 ------
     Prints weight-sweep table to stdout.
-    Saves phase17_ensemble.md to outputs/reports/.
+    Saves phase18_ensemble.md to outputs/reports/.
 """
 from __future__ import annotations
 
@@ -113,19 +116,20 @@ def main() -> None:
         len(pnl_comm), res_comm.ls_sharpe,
     )
 
-    # ── 2. Equity sector h=63 MeanReversion (embargo=63) ────────────────────
-    logger.info("Running equity sector h=63 MeanReversion (embargo=63) …")
+    # ── 2. Equity sector h=63 LightGBM PredAvg21 (embargo=63) ──────────────
+    logger.info("Running equity sector h=63 LightGBM PredAvg21 (embargo=63) …")
     t0 = time.time()
     results_equity = run_sectors_pipeline(
         cfg,
         horizon=63,
         force_refresh=False,
         embargo=63,
-        model_names=["MeanReversion"],
+        model_names=["LightGBM"],
+        pred_avg_window=21,
     )
     logger.info("Equity done in %.1fs", time.time() - t0)
 
-    res_equity = results_equity["MeanReversion"]
+    res_equity = results_equity["LightGBM"]
     pnl_equity: pd.Series = res_equity.ls_pnl_ts.copy()
     logger.info(
         "Equity P&L: %s → %s  (%d days)  Sharpe=%.2f",
@@ -182,10 +186,10 @@ def main() -> None:
 
     # ── Print results ────────────────────────────────────────────────────────
     print("\n" + "=" * 70)
-    print("  PHASE 17A — Cross-Asset Ensemble  (commodity vs equity sectors)")
+    print("  PHASE 18A — Cross-Asset Ensemble  (commodity vs equity sectors)")
     print("=" * 70)
-    print(f"\n  Commodity h=63 LightGBM Sharpe (sub63):  {_fmt(res_comm.ls_sharpe)}")
-    print(f"  Equity h=63 MeanReversion Sharpe (sub63): {_fmt(res_equity.ls_sharpe)}")
+    print(f"\n  Commodity h=63 LightGBM Sharpe (sub63):         {_fmt(res_comm.ls_sharpe)}")
+    print(f"  Equity h=63 LightGBM PredAvg21 Sharpe (sub63): {_fmt(res_equity.ls_sharpe)}")
     print(f"\n  P&L correlation: {corr:+.4f}  — {div_comment}")
 
     if np.isfinite(res_comm.ls_sharpe) and np.isfinite(res_equity.ls_sharpe):
@@ -236,7 +240,7 @@ def main() -> None:
         "n_dropped_equity": int(n_dropped_equity),
         "sweep": sweep_df.reset_index().to_dict(orient="records"),
     }
-    json_path = out_dir / "phase17a_results.json"
+    json_path = out_dir / "phase18a_results.json"
     json_path.write_text(json.dumps(results_data, indent=2), encoding="utf-8")
     logger.info("Results saved → %s", json_path)
 
@@ -245,9 +249,9 @@ def main() -> None:
 
 
 def _write_ensemble_report(cfg, data: dict, sweep_df: pd.DataFrame) -> None:
-    """Write outputs/reports/phase17_ensemble.md."""
+    """Write outputs/reports/phase18_ensemble.md."""
     out_dir = cfg.paths.outputs_reports
-    path = out_dir / "phase17_ensemble.md"
+    path = out_dir / "phase18_ensemble.md"
 
     corr = data["correlation"]
     comm_sharpe = data["comm_sharpe"]
@@ -277,14 +281,14 @@ def _write_ensemble_report(cfg, data: dict, sweep_df: pd.DataFrame) -> None:
     tbl = "\n".join(tbl_rows)
 
     lines = [
-        "# Phase 17A — Cross-Asset Ensemble Results",
+        "# Phase 18A — Cross-Asset Ensemble Results (Upgraded Equity Leg)",
         "",
         "## Individual signal performance",
         "",
         "| Signal | Sharpe (sub63) | Horizon | Asset class |",
         "| --- | --- | --- | --- |",
         f"| Commodity LightGBM | {_fmt(comm_sharpe)} | 63d | Precious metals futures |",
-        f"| Equity MeanReversion | {_fmt(equity_sharpe)} | 63d | SPDR sector ETFs |",
+        f"| Equity LightGBM PredAvg21 | {_fmt(equity_sharpe)} | 63d | SPDR sector ETFs |",
         "",
         "## P&L correlation",
         "",

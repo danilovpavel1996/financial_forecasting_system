@@ -1,11 +1,14 @@
-"""Equity sector cross-sectional ranking pipeline.
+"""Forex cross-sectional ranking pipeline.
 
-Entry point: run_sectors_pipeline(cfg, horizon) → dict[name → RankingResult]
+Entry point: run_forex_pipeline(cfg, horizon) → dict[name → RankingResult]
 
-Mirrors pipeline_ranking.py but operates on the equity sector universe
-configured under equity_sectors in config.yaml.  No COT data, no carry
-proxy — these are futures-specific features.  All sector ETFs close at
-4pm ET so no late-close lag is needed.
+Mirrors pipeline_ranking_sectors.py but operates on the forex universe
+configured under forex in config.yaml.
+
+No COT (not configured for forex).
+No carry_proxy (no ETF pairs for forex).
+No late-close lag — forex closes at 5pm ET for all pairs simultaneously,
+so there is no asymmetric timing issue.
 """
 from __future__ import annotations
 
@@ -32,7 +35,7 @@ from src.models.lambdamart import LambdaMARTModel
 logger = logging.getLogger(__name__)
 
 
-def run_sectors_pipeline(
+def run_forex_pipeline(
     cfg: Config,
     horizon: int,
     force_refresh: bool = False,
@@ -43,31 +46,33 @@ def run_sectors_pipeline(
     model_names: list[str] | None = None,
     pred_avg_window: int = 1,
 ) -> Dict[str, RankingResult]:
-    """Build equity sector pooled dataset and run walk-forward ranking backtest.
+    """Build forex pooled dataset and run walk-forward ranking backtest.
 
     Parameters
     ----------
-    cfg:           project config.
-    horizon:       forecast horizon in trading days (5, 21, or 63).
-    force_refresh: if True, re-fetch data from network.
-    embargo:       override splitter embargo (defaults to horizon).
-    model_names:   restrict which models to run (default: all).
+    cfg:              project config.
+    horizon:          forecast horizon in trading days (5, 21, or 63).
+    force_refresh:    if True, re-fetch data from network.
+    embargo:          override splitter embargo (defaults to horizon).
+    model_names:      restrict which models to run (default: all).
+    pred_avg_window:  rolling mean window applied to predictions before ranking.
+                      1 = no averaging (default). 21 = B3 variant.
 
     Returns
     -------
     dict mapping model name → RankingResult.
     """
-    sector_tkrs = universe.sector_tickers(cfg)
-    if not sector_tkrs:
-        raise ValueError("equity_sectors.ranked_assets is empty in config.yaml")
+    forex_tkrs = universe.forex_tickers(cfg)
+    if not forex_tkrs:
+        raise ValueError("forex.ranked_assets is empty in config.yaml")
 
-    context_tkrs = universe.sector_context_tickers(cfg)
-    all_tickers = universe.sector_price_tickers(cfg)
-    start_date = universe.sector_start_date(cfg)
+    context_tkrs = universe.forex_context_tickers(cfg)
+    all_tickers = universe.forex_price_tickers(cfg)
+    start_date = universe.forex_start_date(cfg)
 
     logger.info(
-        "Equity sector universe: %d assets, context: %s, start_date: %s",
-        len(sector_tkrs), context_tkrs, start_date,
+        "Forex universe: %d pairs, context: %s, start_date: %s",
+        len(forex_tkrs), context_tkrs, start_date,
     )
 
     # ── Load raw data ────────────────────────────────────────────────────────
@@ -79,14 +84,13 @@ def run_sectors_pipeline(
         force_refresh=force_refresh,
     )
 
-    # Log data coverage for each sector
-    for tkr in sector_tkrs:
+    for tkr in forex_tkrs:
         if tkr in prices:
             first = prices[tkr].index[0].date()
             n_rows = len(prices[tkr])
-            logger.info("Sector ETF %s: %d rows, first date %s", tkr, n_rows, first)
+            logger.info("Forex pair %s: %d rows, first date %s", tkr, n_rows, first)
         else:
-            logger.warning("Sector ETF %s not in prices — will be missing!", tkr)
+            logger.warning("Forex pair %s not in prices — will be missing!", tkr)
 
     api_key = os.environ.get("FRED_API_KEY", "").strip()
     macro_raw = fetch_all_series(
@@ -99,31 +103,30 @@ def run_sectors_pipeline(
     )
 
     # ── Build pooled dataset ─────────────────────────────────────────────────
-    # No COT (equities have no CFTC data).
-    # No carry_proxy (futures-specific).
-    # No late_close lag (all ETFs close at 4pm ET, same as targets).
+    # No COT (not configured for forex).
+    # No carry_proxy (no ETF pairs).
+    # No late-close lag (all forex pairs record 5pm ET close; same timestamp).
     pooled = build_pooled_dataset(
         cfg,
         prices,
         macro_raw,
         horizon=horizon,
         cot_raw=None,
-        ranked_override=sector_tkrs,
+        ranked_override=forex_tkrs,
         context_override=context_tkrs,
-        ref_ticker_override=sector_tkrs[0],  # e.g., XLB as trading calendar
-        late_close_override=set(),            # no lag for ETF-vs-ETF universe
-        carry_pairs_override={},              # basis_momentum only; no carry_proxy
+        ref_ticker_override=forex_tkrs[0],  # e.g., EURUSD=X as trading calendar
+        late_close_override=set(),           # no lag: all pairs same timestamp
+        carry_pairs_override={},             # basis_momentum only; no carry_proxy
     )
 
     fcols = feature_cols(pooled)
     logger.info(
-        "Sector pooled dataset: %d rows × %d features, horizon=%d",
+        "Forex pooled dataset: %d rows × %d features, horizon=%d",
         len(pooled), len(fcols), horizon,
     )
 
     # ── Feature-column indices for ranking baselines ─────────────────────────
-    mom_21d_idx = fcols.index("mom_21d") if "mom_21d" in fcols else 0
-    ret_5d_idx  = fcols.index("ret_5d")  if "ret_5d"  in fcols else 1
+    ret_5d_idx = fcols.index("ret_5d") if "ret_5d" in fcols else 1
 
     # ── Splitter ─────────────────────────────────────────────────────────────
     _embargo = embargo if embargo is not None else horizon
@@ -135,18 +138,18 @@ def run_sectors_pipeline(
         expanding=True,
     )
 
-    n_assets = len(sector_tkrs)
+    n_assets = len(forex_tkrs)
     n_long = 2 if n_assets >= 6 else 1
     n_short = 2 if n_assets >= 6 else 1
     logger.info(
-        "Sector ranking: %d assets, n_long=%d, n_short=%d", n_assets, n_long, n_short
+        "Forex ranking: %d pairs, n_long=%d, n_short=%d", n_assets, n_long, n_short
     )
 
     bt = RankingBacktester(
         splitter=splitter,
         cost_bps=cfg.cost_bps,
         horizon=horizon,
-        assets=sorted(sector_tkrs),
+        assets=sorted(forex_tkrs),
         n_long=n_long,
         n_short=n_short,
         vol_target=vol_target,
@@ -168,7 +171,7 @@ def run_sectors_pipeline(
 
     results: Dict[str, RankingResult] = {}
     for name, factory in factories.items():
-        logger.info("Running %s (horizon=%d) on equity sectors …", name, horizon)
+        logger.info("Running %s (horizon=%d) on forex …", name, horizon)
         r = bt.run(pooled, factory, model_name=name)
         results[name] = r
         logger.info(

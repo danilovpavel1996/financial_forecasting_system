@@ -25,6 +25,7 @@ Baselines
 from __future__ import annotations
 
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -162,6 +163,7 @@ class RankingBacktester:
     vol_target: float | None = None
     max_leverage: float = 2.0
     vol_lookback: int = 21
+    pred_avg_window: int = 1  # rolling mean window applied to predictions before ranking
 
     def run(
         self,
@@ -200,6 +202,9 @@ class RankingBacktester:
         n_folds_used = 0
 
         prev_pos = {a: 0.0 for a in self.assets}
+
+        # Rolling prediction buffer for prediction averaging (B3 variant)
+        _pred_buf: deque[np.ndarray] = deque(maxlen=self.pred_avg_window)
 
         # Vol targeter (stateful; accumulates P&L across folds)
         vol_targeter = (
@@ -256,6 +261,11 @@ class RankingBacktester:
                     continue
 
                 pred = model.predict(X_date)  # shape (n_assets,)
+
+                # ── Prediction averaging (B3 variant: rolling mean) ─────────
+                if self.pred_avg_window > 1:
+                    _pred_buf.append(pred)
+                    pred = np.mean(np.stack(list(_pred_buf)), axis=0)
 
                 # ── Construct L/S positions ─────────────────────────────────
                 new_pos_arr = _construct_positions(

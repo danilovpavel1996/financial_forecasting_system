@@ -42,6 +42,7 @@ class Config:
     paths: PathsConfig
     cftc: Dict = field(default_factory=dict)  # {"report_type": ..., "codes": {...}}
     equity_sectors: Dict = field(default_factory=dict)  # Phase 16 equity sector universe
+    forex: Dict = field(default_factory=dict)  # Phase 18 forex universe
 
     def all_price_tickers(self) -> List[str]:
         """Return the flat list of all price tickers (metals + ETFs + macro context)."""
@@ -86,6 +87,7 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
         paths=paths,
         cftc=raw.get("cftc", {}),
         equity_sectors=raw.get("equity_sectors", {}),
+        forex=raw.get("forex", {}),
     )
 
     _validate_config(cfg)

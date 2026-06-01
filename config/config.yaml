@@ -83,6 +83,26 @@ paths:
   outputs_reports: "outputs/reports"
   outputs_models: "outputs/models"
 
+# Phase 18: forex universe — 7 major USD pairs.
+# Forex is 24/5; yfinance records a 5pm ET close for all pairs simultaneously.
+# No late-close lag needed (all pairs use the same timestamp).
+# No COT (not configured for forex). No carry_proxy (no ETF pairs).
+forex:
+  ranked_assets:
+    - "EURUSD=X"    # Euro / USD
+    - "GBPUSD=X"    # British Pound / USD
+    - "USDJPY=X"    # USD / Japanese Yen
+    - "AUDUSD=X"    # Australian Dollar / USD
+    - "USDCAD=X"    # USD / Canadian Dollar
+    - "USDCHF=X"    # USD / Swiss Franc
+    - "NZDUSD=X"    # New Zealand Dollar / USD
+  context:
+    - "SPY"
+    - "TLT"
+    - "UUP"
+    - "^VIX"
+  start_date: "2005-01-01"
+
 # Phase 16: equity sector universe — parallel to the commodity universe above.
 # The 9 original SPDR sector ETFs with history back to 1998.
 equity_sectors:

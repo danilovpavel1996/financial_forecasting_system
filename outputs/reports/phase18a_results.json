@@ -1,0 +1,48 @@
+{
+  "comm_sharpe": 0.7945139207384116,
+  "equity_sharpe": 0.4114413908986201,
+  "correlation": 0.37156284371975273,
+  "div_comment": "Low \u2014 meaningful diversification benefit.",
+  "common_start": "2016-06-03",
+  "common_end": "2023-10-27",
+  "common_n": 1835,
+  "n_dropped_comm": 181,
+  "n_dropped_equity": 181,
+  "sweep": [
+    {
+      "weights (comm/eq)": "100/0",
+      "Sharpe_raw": 3.6724821643766075,
+      "Sharpe_sub63": 0.8953915164580668,
+      "ann_ret": 0.12069792207632216,
+      "max_dd": -0.14805494628258375
+    },
+    {
+      "weights (comm/eq)": "75/25",
+      "Sharpe_raw": 3.7321630770366223,
+      "Sharpe_sub63": 0.9120948579180397,
+      "ann_ret": 0.09968645897284077,
+      "max_dd": -0.13221306330543003
+    },
+    {
+      "weights (comm/eq)": "50/50",
+      "Sharpe_raw": 3.680941991127015,
+      "Sharpe_sub63": 0.8815298857693081,
+      "ann_ret": 0.07867499586935937,
+      "max_dd": -0.13195842478675934
+    },
+    {
+      "weights (comm/eq)": "25/75",
+      "Sharpe_raw": 3.229653590685365,
+      "Sharpe_sub63": 0.7305023419078841,
+      "ann_ret": 0.057663532765878,
+      "max_dd": -0.13541181688752735
+    },
+    {
+      "weights (comm/eq)": "0/100",
+      "Sharpe_raw": 2.0035080771709226,
+      "Sharpe_sub63": 0.44636326910715346,
+      "ann_ret": 0.03665206966239661,
+      "max_dd": -0.1707315115635205
+    }
+  ]
+}

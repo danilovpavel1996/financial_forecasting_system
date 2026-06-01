@@ -97,6 +97,32 @@ def sector_start_date(cfg: Config) -> str:
     return cfg.equity_sectors.get("start_date", cfg.dates["start"])
 
 
+def forex_tickers(cfg: Config) -> List[str]:
+    """Flat list of forex pair tickers from the forex config section."""
+    return list(cfg.forex.get("ranked_assets", []))
+
+
+def forex_context_tickers(cfg: Config) -> List[str]:
+    """Context tickers for the forex universe."""
+    return list(cfg.forex.get("context", []))
+
+
+def forex_price_tickers(cfg: Config) -> List[str]:
+    """All price tickers needed for the forex pipeline, deduplicated."""
+    seen: set = set()
+    tickers: List[str] = []
+    for t in forex_tickers(cfg) + forex_context_tickers(cfg):
+        if t not in seen:
+            tickers.append(t)
+            seen.add(t)
+    return tickers
+
+
+def forex_start_date(cfg: Config) -> str:
+    """Historical start date for the forex universe."""
+    return cfg.forex.get("start_date", cfg.dates["start"])
+
+
 def equity_context_tickers(cfg: Config) -> List[str]:
     """Equity-market tickers (ETFs + macro context) that close at 4pm ET.
 
