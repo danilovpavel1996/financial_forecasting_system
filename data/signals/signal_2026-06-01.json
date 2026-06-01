@@ -1,0 +1,97 @@
+{
+  "date": "2026-06-01",
+  "feature_date": "2026-05-31",
+  "horizon": 5,
+  "model_name": "MeanReversion",
+  "model_trained_on": null,
+  "rankings": [
+    {
+      "ticker": "CL=F",
+      "name": "Crude Oil",
+      "predicted_return": 0.074777,
+      "rank": 1,
+      "position": "LONG",
+      "recent_mom_5d": -0.074777,
+      "current_vol": 0.682
+    },
+    {
+      "ticker": "ZC=F",
+      "name": "Corn",
+      "predicted_return": 0.034107,
+      "rank": 2,
+      "position": "LONG",
+      "recent_mom_5d": -0.034107,
+      "current_vol": 0.236
+    },
+    {
+      "ticker": "SI=F",
+      "name": "Silver",
+      "predicted_return": 0.009572,
+      "rank": 3,
+      "position": "FLAT",
+      "recent_mom_5d": -0.009572,
+      "current_vol": 0.5309
+    },
+    {
+      "ticker": "ZS=F",
+      "name": "Soybeans",
+      "predicted_return": 0.0063,
+      "rank": 4,
+      "position": "FLAT",
+      "recent_mom_5d": -0.0063,
+      "current_vol": 0.1814
+    },
+    {
+      "ticker": "PL=F",
+      "name": "Platinum",
+      "predicted_return": 0.002073,
+      "rank": 5,
+      "position": "FLAT",
+      "recent_mom_5d": -0.002073,
+      "current_vol": 0.3839
+    },
+    {
+      "ticker": "HG=F",
+      "name": "Copper",
+      "predicted_return": -0.007618,
+      "rank": 6,
+      "position": "FLAT",
+      "recent_mom_5d": 0.007618,
+      "current_vol": 0.2725
+    },
+    {
+      "ticker": "GC=F",
+      "name": "Gold",
+      "predicted_return": -0.009663,
+      "rank": 7,
+      "position": "FLAT",
+      "recent_mom_5d": 0.009663,
+      "current_vol": 0.213
+    },
+    {
+      "ticker": "PA=F",
+      "name": "Palladium",
+      "predicted_return": -0.014257,
+      "rank": 8,
+      "position": "SHORT",
+      "recent_mom_5d": 0.014257,
+      "current_vol": 0.3947
+    },
+    {
+      "ticker": "NG=F",
+      "name": "Nat Gas",
+      "predicted_return": -0.141242,
+      "rank": 9,
+      "position": "SHORT",
+      "recent_mom_5d": 0.141242,
+      "current_vol": 0.5644
+    }
+  ],
+  "confidence": {
+    "backtest_sharpe": 0.63,
+    "backtest_cs_ric": 0.02,
+    "days_since_retrain": 0,
+    "current_vol_regime": "high",
+    "vol_scale": 0.26
+  }
+}

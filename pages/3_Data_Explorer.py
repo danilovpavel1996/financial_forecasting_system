@@ -115,7 +115,7 @@ with tab_cov:
 with tab_price:
     st.markdown("### Closing prices (log scale)")
     col_ticker, col_log = st.columns([2, 1])
-    selected_ticker = col_ticker.selectbox("Commodity", ranked)
+    selected_ticker = col_ticker.selectbox("Commodity", ranked, key="price_ticker")
     log_scale = col_log.checkbox("Log scale", value=True)
 
     fig = price_chart(prices, selected_ticker, log_scale=log_scale)
@@ -138,7 +138,7 @@ with tab_cot:
     if not cot_raw:
         st.warning("No COT data loaded. Check that the CFTC cache exists.")
     else:
-        cot_ticker = st.selectbox("Commodity", [t for t in ranked if t in cot_raw])
+        cot_ticker = st.selectbox("Commodity", [t for t in ranked if t in cot_raw], key="cot_ticker")
         if cot_ticker:
             fig_cot = cot_positioning_chart(cot_raw[cot_ticker], cot_ticker)
             st.plotly_chart(fig_cot, use_container_width=True)
