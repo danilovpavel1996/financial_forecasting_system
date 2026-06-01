@@ -229,7 +229,11 @@ class RankingBacktester:
                 continue
 
             model = model_factory()
-            model.fit(X_train[ok], y_train[ok])
+            if getattr(model, "requires_groups", False):
+                dates_train = train_sub.index.get_level_values("date").values
+                model.fit(X_train[ok], y_train[ok], dates_train[ok])
+            else:
+                model.fit(X_train[ok], y_train[ok])
             n_folds_used += 1
 
             # ── Test: iterate through dates in chronological order ──────────

@@ -28,6 +28,7 @@ from src.eval.rank_backtester import (
 from src.eval.splitter import WalkForwardSplitter
 from src.features.pooled_dataset import build_pooled_dataset, feature_cols
 from src.models.gbm import LightGBMModel
+from src.models.lambdamart import LambdaMARTModel
 from src.models.linear import ElasticNetModel
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,8 @@ def run_ranking_pipeline(
     vol_target: float | None = None,
     max_leverage: float = 2.0,
     vol_lookback: int = 21,
+    embargo: int | None = None,
+    model_names: list[str] | None = None,
 ) -> Dict[str, RankingResult]:
     """Build pooled dataset and run walk-forward ranking backtest.
 
@@ -49,6 +52,9 @@ def run_ranking_pipeline(
     cfg:           project config.
     horizon:       forecast horizon in trading days (1 or 5).
     force_refresh: if True, re-fetch data from network (ignores cache).
+    embargo:       override splitter embargo (defaults to cfg.splitter.embargo).
+                   Should equal horizon to prevent label leakage.
+    model_names:   restrict which models to run (default: all).
 
     Returns
     -------
@@ -108,7 +114,16 @@ def run_ranking_pipeline(
     ret_5d_idx  = fcols.index("ret_5d")  if "ret_5d"  in fcols else 1
 
     # ── Splitter ─────────────────────────────────────────────────────────────
-    splitter = WalkForwardSplitter.from_config(cfg)
+    if embargo is not None:
+        splitter = WalkForwardSplitter(
+            min_train=int(cfg.splitter.train_years * 252),
+            test_size=int(cfg.splitter.test_years * 252),
+            embargo=embargo,
+            n_splits=cfg.splitter.n_splits,
+            expanding=True,
+        )
+    else:
+        splitter = WalkForwardSplitter.from_config(cfg)
 
     ranked = universe.ranked_tickers(cfg)
     n_assets = len(ranked)
@@ -131,13 +146,18 @@ def run_ranking_pipeline(
     )
 
     rng_seed = cfg.random_seed
-    factories = {
+    all_factories = {
         "EqualWeight":   EqualWeightRanker,
         "MomentumRank":  lambda: MomentumRankRanker(feature_idx=mom_21d_idx),
         "MeanReversion": lambda: MeanReversionRanker(feature_idx=ret_5d_idx),
         "ElasticNet":    lambda: ElasticNetModel(random_state=rng_seed),
         "LightGBM":      lambda: LightGBMModel(random_state=rng_seed),
+        "LambdaMART":    lambda: LambdaMARTModel(random_state=rng_seed),
     }
+    if model_names is not None:
+        factories = {k: v for k, v in all_factories.items() if k in model_names}
+    else:
+        factories = all_factories
 
     results: Dict[str, RankingResult] = {}
     for name, factory in factories.items():
