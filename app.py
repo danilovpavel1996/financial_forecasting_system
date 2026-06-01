@@ -90,6 +90,11 @@ with st.sidebar:
         value=False,
         help="Add CFTC Commitment of Traders features. Phase 9 showed neutral/negative impact at h=5.",
     )
+    force_refresh = st.checkbox(
+        "Refresh features",
+        value=False,
+        help="Delete and rebuild cached feature matrices from raw data. Use after config or feature changes.",
+    )
 
     st.subheader("Models")
     selected_models = st.multiselect(
@@ -123,6 +128,7 @@ if run_btn:
             max_leverage=max_leverage,
             vol_lookback=int(vol_lookback),
             models=selected_models,
+            force_refresh=force_refresh,
         )
         with st.spinner("Running backtest… this takes ~30–60 s"):
             try:
@@ -180,7 +186,7 @@ st.info(verdict)
 col1, col2 = st.columns(2)
 with col1:
     st.markdown("#### Equity curve")
-    fig_eq = equity_curve(results)
+    fig_eq = equity_curve(results, horizon=horizon)
     st.plotly_chart(fig_eq, use_container_width=True)
 
 with col2:

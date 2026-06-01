@@ -36,13 +36,17 @@ _LAYOUT = dict(
 
 # ── Backtest charts ───────────────────────────────────────────────────────────
 
-def equity_curve(results: dict, skip_flat: bool = True) -> go.Figure:
+def equity_curve(results: dict, skip_flat: bool = True, horizon: int = 1) -> go.Figure:
     """Cumulative equity curve for all models in results dict."""
     fig = go.Figure()
     for i, (name, r) in enumerate(results.items()):
         pnl = r.ls_pnl_ts.dropna()
         if skip_flat and pnl.abs().sum() < 1e-10:
             continue
+        # Subsample to non-overlapping periods when horizon > 1 to avoid
+        # compounding overlapping returns, which inflates the curve by ~horizon.
+        if horizon > 1:
+            pnl = pnl.iloc[::horizon]
         cum = (1 + pnl).cumprod()
         colour = _COLOURS[i % len(_COLOURS)]
         fig.add_trace(go.Scatter(
