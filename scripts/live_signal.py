@@ -62,7 +62,8 @@ def main() -> None:
     live_cfg = cfg.cftc  # re-use for live settings lookup
     live_settings = getattr(cfg, '__dict__', {}).get('live_settings', {})
 
-    # Phase 14 best config: LightGBM h=63 no-COT, Sharpe 0.79 OOS
+    # Phase 14 best config: LightGBM h=63 no-COT, Sharpe 0.79 OOS (commodity)
+    # Phase 17: cross-asset ensemble (50/50 commodity+equity) → Sharpe 0.97 on 2016-2023 OOS
     horizon = args.horizon or 63
     staleness_days = 7
 

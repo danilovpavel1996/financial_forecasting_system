@@ -425,7 +425,10 @@ if st.session_state.live_signal is None:
 *Phase 14 out-of-sample Sharpe: 0.79 (h=63, LightGBM no-COT, 2005–2024)*
 
 **Equity Sectors universe:** XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY
-*Phase 16 sweep results: see outputs/reports/phase16_sweep.md after running scripts/run_sweep_sectors.py*
+*Phase 17 best: 0.48 Sharpe (h=63, LightGBM + 21-day prediction averaging; turnover 0.031)*
+
+**Cross-asset ensemble (Phase 17):** 50/50 commodity + equity → Sharpe 0.97 (2016–2023 OOS, ρ=0.13)
+*See outputs/reports/phase17_summary.md for full results.*
 """)
     st.stop()
 
