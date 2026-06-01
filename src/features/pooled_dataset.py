@@ -26,10 +26,12 @@ import pandas as pd
 
 from src.config import Config
 from src.data import universe
+from src.features.carry_features import build_carry_features
 from src.features.cot_features import build_cot_features, build_cross_cot_features
 from src.features.cross_features import build_cross_features
 from src.features.macro_features import build_macro_features
 from src.features.price_features import build_price_features
+from src.features.seasonal_features import build_seasonal_features
 from src.targets import forward_log_return
 
 logger = logging.getLogger(__name__)
@@ -111,6 +113,12 @@ def build_pooled_dataset(
     # ── Common context features (same for all assets on the same date) ───────
     macro_feats = build_macro_features(macro_raw, trading_index=ref_index)
 
+    # ── Seasonal features (same for all assets on the same date) ─────────────
+    seasonal_feats = build_seasonal_features(ref_index)
+
+    # ── Carry / term-structure features (per-asset) ───────────────────────────
+    carry_feats = build_carry_features(prices, metals, ref_index)
+
     # ── Cross-asset features (all N assets together) ─────────────────────────
     cross_feats = build_cross_features(prices, metals, ref_index)
 
@@ -162,8 +170,14 @@ def build_pooled_dataset(
         if ticker in onehot_map:
             onehot[onehot_map[ticker]] = 1.0
 
-        # Assemble all feature columns + macro + (COT if enabled) + target
-        df = own_feats.join(cross, how="left").join(macro_feats, how="left")
+        # Assemble all feature columns + macro + seasonal + carry + (COT if enabled) + target
+        df = (
+            own_feats
+            .join(cross, how="left")
+            .join(macro_feats, how="left")
+            .join(seasonal_feats, how="left")
+            .join(carry_feats[ticker].reindex(ref_index), how="left")
+        )
         if use_cot:
             df = (
                 df

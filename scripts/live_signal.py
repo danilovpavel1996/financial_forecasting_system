@@ -42,9 +42,9 @@ logger = logging.getLogger("live_signal")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate today's live commodity signal")
     parser.add_argument("--horizon", type=int, default=None,
-                        help="Forecast horizon in trading days")
-    parser.add_argument("--model", choices=["mean", "lgbm"], default="mean",
-                        help="mean = MeanReversion, lgbm = LightGBM")
+                        help="Forecast horizon in trading days (default: 63, per Phase 14 best config)")
+    parser.add_argument("--model", choices=["mean", "lgbm"], default="lgbm",
+                        help="mean = MeanReversion, lgbm = LightGBM (default: lgbm, Phase 14 best)")
     parser.add_argument("--retrain", action="store_true",
                         help="Force model retraining")
     parser.add_argument("--no-save", action="store_true",
@@ -62,7 +62,8 @@ def main() -> None:
     live_cfg = cfg.cftc  # re-use for live settings lookup
     live_settings = getattr(cfg, '__dict__', {}).get('live_settings', {})
 
-    horizon = args.horizon or 5
+    # Phase 14 best config: LightGBM h=63 no-COT, Sharpe 0.79 OOS
+    horizon = args.horizon or 63
     staleness_days = 7
 
     # ── Fetch live data ───────────────────────────────────────────────────────
@@ -99,8 +100,8 @@ def main() -> None:
         horizon=horizon,
         model_name=model_name,
         use_cot=False,
-        backtest_sharpe=0.63,
-        backtest_cs_ric=0.020,
+        backtest_sharpe=0.79,   # Phase 14 best: LightGBM h=63 no-COT
+        backtest_cs_ric=0.055,
         vol_target=0.10,
     )
 

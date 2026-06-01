@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 REAL_YIELD = "DFII10"
 BREAKEVEN = "T10YIE"
 NOM_YIELD = "DGS10"
+SHORT_YIELD = "DGS2"
 DXY = "DTWEXBGS"
 VIX = "VIXCLS"
 
@@ -155,6 +156,19 @@ def build_macro_features(
     dgs10 = _get(NOM_YIELD)
     if dgs10 is not None:
         cols["dgs10_chg_1d"] = daily_change(dgs10)
+
+    # --- 2Y yield and yield curve slope (DGS10 - DGS2) ---
+    dgs2 = _get(SHORT_YIELD)
+    if dgs10 is not None and dgs2 is not None:
+        slope = dgs10 - dgs2
+        slope.name = "yield_curve_slope"
+        cols["yield_curve_slope"] = slope
+        cols["yield_curve_slope_chg_21d"] = slope.diff(21)
+        # Rolling 252-day z-score: captures whether curve is steep/flat vs recent history.
+        # Trailing window only — no future data used.
+        mu = slope.rolling(window=252, min_periods=252).mean()
+        sigma = slope.rolling(window=252, min_periods=252).std()
+        cols["yield_curve_slope_zscore"] = (slope - mu) / sigma
 
     # --- DXY / USD index (DTWEXBGS) ---
     dxy = _get(DXY)
