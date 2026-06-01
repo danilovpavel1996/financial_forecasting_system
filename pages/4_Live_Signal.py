@@ -81,8 +81,8 @@ def _generate(horizon, model_name, retrain, refresh):
         horizon=horizon,
         model_name=model_name,
         use_cot=False,
-        backtest_sharpe=0.63,
-        backtest_cs_ric=0.020,
+        backtest_sharpe=0.79,
+        backtest_cs_ric=0.055,
         vol_target=0.10,
     ), live_data
 
@@ -111,7 +111,7 @@ if st.session_state.live_signal is None:
 - The MeanReversion model ranks by **negative 5-day trailing return** (mean-reversion heuristic)
 - Features use yesterday's closes — same exact code path as the backtest
 
-*Phase 8 out-of-sample Sharpe: 0.63 (h=5, MeanReversion, 2010–2024)*
+*Phase 14 out-of-sample Sharpe: 0.79 (h=63, LightGBM no-COT, 2005–2024)*
 """)
     st.stop()
 
