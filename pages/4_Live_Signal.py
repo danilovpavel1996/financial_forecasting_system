@@ -32,7 +32,7 @@ with st.sidebar:
     st.title("📊 Forecast Research")
     st.caption("Daily commodity ranking system")
     st.divider()
-    horizon = st.select_slider("Horizon (trading days)", [1, 5, 10, 21], value=5)
+    horizon = st.select_slider("Horizon (trading days)", [1, 5, 10, 21, 63], value=63)
     model_choice = st.radio("Model", ["MeanReversion", "LightGBM"], index=0)
     force_retrain = st.checkbox("Force retrain", value=False,
                                 help="Retrain LightGBM even if model is fresh")
