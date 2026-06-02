@@ -22,8 +22,9 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Explicit gain for labels 0..8 (nine assets): gain_i = 2^i - 1
-_LABEL_GAIN_9 = [0, 1, 3, 7, 15, 31, 63, 127, 255]
+def _label_gain(n: int) -> list[int]:
+    """NDCG gain values for labels 0..n-1 using the standard 2^i-1 formula."""
+    return [max(0, (1 << i) - 1) for i in range(n)]
 
 
 class LambdaMARTModel:
@@ -78,7 +79,6 @@ class LambdaMARTModel:
             "objective": "lambdarank",
             "metric": "ndcg",
             "ndcg_eval_at": [3, 5],
-            "label_gain": _LABEL_GAIN_9,
             "learning_rate": learning_rate,
             "num_leaves": num_leaves,
             "min_child_samples": min_child_samples,
@@ -180,6 +180,10 @@ class LambdaMARTModel:
         n_dates = len(groups)
         relevance = self._returns_to_relevance(y, date_codes)
 
+        # label_gain must cover the full label range (0 .. max_group_size - 1)
+        max_group = max(groups) if groups else 1
+        params = dict(self._params, label_gain=_label_gain(max_group))
+
         fit_end, val_start = self._split_train_val_dates(n_dates)
 
         if fit_end < 0:
@@ -191,7 +195,7 @@ class LambdaMARTModel:
                 X, label=relevance, group=groups, free_raw_data=False
             )
             self._booster = lgb.train(
-                self._params, ds, num_boost_round=self._n_estimators
+                params, ds, num_boost_round=self._n_estimators
             )
         else:
             cum = np.concatenate([[0], np.cumsum(groups)])
@@ -218,7 +222,7 @@ class LambdaMARTModel:
                 lgb.log_evaluation(period=-1),
             ]
             self._booster = lgb.train(
-                self._params,
+                params,
                 ds_fit,
                 num_boost_round=self._n_estimators,
                 valid_sets=[ds_val],

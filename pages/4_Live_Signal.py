@@ -19,7 +19,7 @@ import streamlit as st
 from src.config import load_config
 from src.data import universe
 from dashboard.charts import _COLOURS, _LAYOUT
-from dashboard.signal_configs import SIGNALS, FOREX_NAMES
+from dashboard.signal_configs import SIGNALS, FOREX_NAMES, CRYPTO_NAMES
 from dashboard.ib_tickers import YFINANCE_TO_IB, contracts as ib_contracts, ib_exchange, ib_symbol
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -53,10 +53,11 @@ with st.sidebar:
         list(SIGNALS.keys()),
         index=0,
         help=(
-            "Choose one of the 4 signals built across 18 phases.\n\n"
-            "• Commodity h=63 (Sharpe 0.79)\n"
-            "• Forex h=5 PredAvg21 (Sharpe 0.94)\n"
-            "• Equity B3 h=63 (Sharpe 0.41)\n"
+            "Choose a signal built across 20 phases.\n\n"
+            "• Commodity h=63 (Sharpe 0.79, cost 5 bps)\n"
+            "• Forex h=5 LightGBM (Sharpe 1.32, cost 3 bps)\n"
+            "• Equity B3 h=63 (Sharpe 0.41, cost 3 bps)\n"
+            "• Crypto MeanRev h=63 (Sharpe 0.26 ⚠️, cost 20 bps, exploratory)\n"
             "• Cross-Asset Blend 50/50 (Sharpe 1.05)"
         ),
     )
@@ -186,6 +187,43 @@ def _generate_single(scfg: dict, retrain: bool, refresh: bool):
         context_tkrs = universe.sector_context_tickers(cfg)
         late_close   = set()
         ref_ticker   = ranked_tkrs[0]
+
+    elif uni == "crypto":
+        import os
+        from src.data.prices import fetch_all_tickers
+        from src.data.macro import fetch_all_series
+        from src.live.data import LiveData
+        from src.pipeline_ranking_crypto import _filter_to_business_days
+
+        today       = datetime.date.today()
+        end_prices  = (today + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        end_date    = today.strftime("%Y-%m-%d")
+        start_date  = universe.crypto_start_date(cfg)
+        live_cache  = cfg.paths.data_raw.parent / "live" / end_date
+        live_cache.mkdir(parents=True, exist_ok=True)
+
+        all_tkrs = universe.crypto_price_tickers(cfg)
+        prices_raw = fetch_all_tickers(all_tkrs, start_date, end_prices, live_cache,
+                                       force_refresh=refresh)
+        prices = _filter_to_business_days(prices_raw)
+
+        macro_raw: dict = {}
+        api_key = os.environ.get("FRED_API_KEY", "").strip()
+        if api_key:
+            try:
+                macro_raw = fetch_all_series(
+                    universe.fred_series(cfg), start_date, end_date, live_cache,
+                    api_key=api_key, force_refresh=refresh,
+                )
+            except Exception as exc:
+                st.warning(f"Macro fetch failed: {exc}")
+
+        live_data    = LiveData(prices=prices, macro_raw=macro_raw, cot_raw={},
+                                as_of=today, start=start_date, end=end_date)
+        ranked_tkrs  = universe.crypto_tickers(cfg)
+        context_tkrs = universe.crypto_context_tickers(cfg)
+        late_close   = set()
+        ref_ticker   = next((t for t in ranked_tkrs if t in prices), ranked_tkrs[0])
     else:
         raise ValueError(f"Unknown universe: {uni}")
 
@@ -224,15 +262,7 @@ def _generate_single(scfg: dict, retrain: bool, refresh: bool):
                     import joblib, datetime as _dt
 
                     kw = {}
-                    if uni == "forex":
-                        kw = dict(
-                            ranked_override=ranked_tkrs,
-                            context_override=context_tkrs,
-                            ref_ticker_override=ref_ticker,
-                            late_close_override=late_close,
-                            carry_pairs_override={},
-                        )
-                    elif uni == "equity_sectors":
+                    if uni in ("forex", "equity_sectors", "crypto"):
                         kw = dict(
                             ranked_override=ranked_tkrs,
                             context_override=context_tkrs,
@@ -319,14 +349,16 @@ st.title(f"🚦 Live Signal — {active_name}")
 if st.session_state.live_signal is None:
     st.info("Choose a signal in the sidebar and click **🚦 Refresh Signal**.")
     st.markdown("""
-| Signal | Universe | Horizon | OOS Sharpe |
-|--------|----------|---------|-----------|
-| Commodity LightGBM h=63 | 9 commodity futures | 63 d | **0.79** |
-| Forex LightGBM h=5 | 7 major USD pairs | 5 d | **0.94** |
-| Equity B3 LightGBM h=63 | 9 SPDR sector ETFs | 63 d | **0.41** |
-| Cross-Asset Blend | Commodity + Forex 50/50 | — | **1.05** |
+| Signal | Universe | Horizon | OOS Sharpe | Cost (bps) |
+|--------|----------|---------|-----------|-----------|
+| Commodity LightGBM h=63 | 9 commodity futures | 63 d | **0.79** | 5 |
+| Forex LightGBM h=5 | 15 forex pairs (Phase 20) | 5 d | **1.32** | 3 |
+| Equity B3 LightGBM h=63 | 9 SPDR sector ETFs | 63 d | **0.41** | 3 |
+| Crypto MeanRev h=63 | 10 crypto tokens (exploratory) | 63 d | 0.26 ⚠️ | 20 |
+| Cross-Asset Blend | Commodity + Forex 50/50 | — | **1.05** | 4 |
 
 *All Sharpe ratios are out-of-sample walk-forward, net of transaction costs.*
+*Crypto results are exploratory: only 3 OOS folds (2020–2024), below 0.3 acceptance threshold.*
 """)
     st.stop()
 
@@ -341,11 +373,16 @@ def _action_from_position(pos: str) -> str:
     return {"LONG": "BUY", "SHORT": "SELL", "FLAT": "HOLD"}.get(pos, "HOLD")
 
 
+def _ticker_display_name(ticker: str, fallback: str) -> str:
+    """Resolve human-readable name from forex or crypto lookup, else fallback."""
+    return FOREX_NAMES.get(ticker) or CRYPTO_NAMES.get(ticker) or fallback
+
+
 def _ranking_table(rankings, live_data=None, sig_date=None, horizon: int = 63):
     """Build a styled ranking DataFrame with trading columns."""
     rows = []
     for r in rankings:
-        name = FOREX_NAMES.get(r.ticker, r.name)
+        name = _ticker_display_name(r.ticker, r.name)
         action = _action_from_position(r.position)
         pred_pct = (np.exp(r.predicted_return) - 1) * 100
 
@@ -405,7 +442,7 @@ def _action_summary(rankings, live_data, sig_date, horizon: int) -> str:
         if r.position not in ("LONG", "SHORT"):
             continue
         action = _action_from_position(r.position)
-        name = FOREX_NAMES.get(r.ticker, r.name)
+        name = _ticker_display_name(r.ticker, r.name)
         pred_pct = (np.exp(r.predicted_return) - 1) * 100
         sign = "+" if pred_pct >= 0 else ""
 
@@ -460,7 +497,7 @@ def _forecast_subplots(picks_with_horizon: list[tuple], live_data) -> list[go.Fi
             continue
 
         colour = _POS_COLOUR[r.position]
-        name   = FOREX_NAMES.get(ticker, r.name)
+        name   = _ticker_display_name(ticker, r.name)
 
         current_price = float(close.iloc[-1])
         pred_return   = r.predicted_return
@@ -588,7 +625,7 @@ def _portfolio_positions(
 
         for r, h in active:
             action    = _action_from_position(r.position)
-            name      = FOREX_NAMES.get(r.ticker, r.name)
+            name      = _ticker_display_name(r.ticker, r.name)
             pred_pct  = (np.exp(r.predicted_return) - 1) * 100
             sign      = "+" if pred_pct >= 0 else ""
 
@@ -604,7 +641,7 @@ def _portfolio_positions(
             review_dates = pd.bdate_range(pd.Timestamp(sig_date), periods=h + 1)
             review_date  = str(review_dates[-1].date())
 
-            # Contract sizing
+            # Contract sizing (fractional for crypto, integer for futures/ETFs)
             n_contracts  = None
             notional_per = None
             micro_note   = None
@@ -613,7 +650,10 @@ def _portfolio_positions(
                 n_contracts, notional_per, micro_note = ib_contracts(
                     r.ticker, per_pos, entry_price
                 )
-                if n_contracts == 0:
+                if isinstance(n_contracts, float):
+                    # Fractional (crypto): show token quantity
+                    contracts_str = f"{n_contracts:.6g}" if n_contracts > 0 else "0 ⚠️"
+                elif n_contracts == 0:
                     contracts_str = "0 ⚠️"
                 else:
                     contracts_str = str(n_contracts)
@@ -827,6 +867,7 @@ def _render_single(sig, live_data, scfg: dict, name: str) -> None:
     # ── Signal context ────────────────────────────────────────────────────────
     with st.expander("Signal context"):
         c = sig.confidence
+        cost_bps_display = scfg.get("cost_bps", "—")
         st.markdown(f"""
 | Metric | Value |
 |--------|-------|
@@ -835,6 +876,7 @@ def _render_single(sig, live_data, scfg: dict, name: str) -> None:
 | Vol regime | {c.current_vol_regime} |
 | Vol-targeting scale | {c.vol_scale:.2f}× |
 | Model staleness | {c.days_since_retrain} day(s) |
+| Transaction cost | {cost_bps_display} bps round-trip |
 | Model | {sig.model_name} |
 | Description | {scfg.get('description', '')} |
 """)
@@ -986,8 +1028,9 @@ def _render_equity_curve(scfg: dict) -> None:
     uni = scfg.get("universe", "commodities")
     phase_map = {
         "commodities":    "phase14_summary.md",
-        "forex":          "phase18_summary.md",
+        "forex":          "phase20_summary.md",
         "equity_sectors": "phase17_summary.md",
+        "crypto":         "phase20_summary.md",
     }
     report_file = cfg.paths.outputs_reports / phase_map.get(uni, "")
     if report_file.exists():

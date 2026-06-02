@@ -83,12 +83,14 @@ paths:
   outputs_reports: "outputs/reports"
   outputs_models: "outputs/models"
 
-# Phase 18: forex universe — 7 major USD pairs.
+# Phase 20: forex universe — 15 pairs (7 majors + 8 crosses).
 # Forex is 24/5; yfinance records a 5pm ET close for all pairs simultaneously.
 # No late-close lag needed (all pairs use the same timestamp).
 # No COT (not configured for forex). No carry_proxy (no ETF pairs).
+# With 15 assets: top-3 long, bottom-3 short.
 forex:
   ranked_assets:
+    # Majors (Phase 18)
     - "EURUSD=X"    # Euro / USD
     - "GBPUSD=X"    # British Pound / USD
     - "USDJPY=X"    # USD / Japanese Yen
@@ -96,12 +98,22 @@ forex:
     - "USDCAD=X"    # USD / Canadian Dollar
     - "USDCHF=X"    # USD / Swiss Franc
     - "NZDUSD=X"    # New Zealand Dollar / USD
+    # Crosses (Phase 20)
+    - "EURJPY=X"    # Euro / Japanese Yen
+    - "GBPJPY=X"    # British Pound / Japanese Yen
+    - "EURGBP=X"    # Euro / British Pound
+    - "AUDJPY=X"    # Australian Dollar / Japanese Yen
+    - "EURAUD=X"    # Euro / Australian Dollar
+    - "GBPAUD=X"    # British Pound / Australian Dollar
+    - "AUDNZD=X"    # Australian Dollar / New Zealand Dollar
+    - "CADJPY=X"    # Canadian Dollar / Japanese Yen
   context:
     - "SPY"
     - "TLT"
     - "UUP"
     - "^VIX"
   start_date: "2005-01-01"
+  cost_bps: 3       # spread-only broker (Fusion Markets): ~1-2 bps/side
 
 # Phase 16: equity sector universe — parallel to the commodity universe above.
 # The 9 original SPDR sector ETFs with history back to 1998.
@@ -122,3 +134,31 @@ equity_sectors:
     - "UUP"
     - "^VIX"
   start_date: "1999-01-01"
+  cost_bps: 3       # ETF: ~1-2 bps spread + commission
+
+# Phase 20: crypto universe — 10 major tokens filtered to business days.
+# Crypto trades 24/7; yfinance includes weekends. Pipeline filters to Mon-Fri
+# so weekend returns are absorbed into Monday's bar (slight approximation).
+crypto:
+  ranked_assets:
+    - "BTC-USD"     # Bitcoin (since ~2014)
+    - "ETH-USD"     # Ethereum (since ~2017)
+    - "XRP-USD"     # Ripple (since ~2017)
+    - "LTC-USD"     # Litecoin (since ~2014)
+    - "ADA-USD"     # Cardano (since ~2017)
+    - "LINK-USD"    # Chainlink (since ~2019)
+    - "DOGE-USD"    # Dogecoin (since ~2019)
+    - "SOL-USD"     # Solana (since ~2020)
+    - "AVAX-USD"    # Avalanche (since ~2020)
+    - "DOT-USD"     # Polkadot (since ~2020)
+  context:
+    - "^VIX"
+    - "SPY"
+    - "TLT"
+  start_date: "2020-01-01"  # common start for all 10 tokens
+  cost_bps: 20              # Binance/Kraken: 0.1% per side = 20 bps round-trip
+  # Crypto-specific splitter: ~5 years of data needs smaller windows than global (20yr) config
+  splitter:
+    train_years: 1.5   # 378 bdays minimum training
+    test_years: 0.5    # 126 bdays per fold
+    n_splits: 3        # 3 non-overlapping annual folds

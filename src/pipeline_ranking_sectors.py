@@ -142,9 +142,10 @@ def run_sectors_pipeline(
         "Sector ranking: %d assets, n_long=%d, n_short=%d", n_assets, n_long, n_short
     )
 
+    _cost_bps = universe.sector_cost_bps(cfg)
     bt = RankingBacktester(
         splitter=splitter,
-        cost_bps=cfg.cost_bps,
+        cost_bps=_cost_bps,
         horizon=horizon,
         assets=sorted(sector_tkrs),
         n_long=n_long,

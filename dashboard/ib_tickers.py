@@ -97,6 +97,110 @@ YFINANCE_TO_IB: dict[str, dict] = {
         "multiplier": 1, "unit": "units",
         "micro": None, "micro_mult": None,
     },
+    # ── Forex cross pairs (Phase 20) ──────────────────────────────────────────
+    "EURJPY=X": {
+        "ib": "EUR.JPY", "name": "EUR/JPY", "exchange": "IDEALPRO",
+        "multiplier": 1, "unit": "units",
+        "micro": None, "micro_mult": None,
+    },
+    "GBPJPY=X": {
+        "ib": "GBP.JPY", "name": "GBP/JPY", "exchange": "IDEALPRO",
+        "multiplier": 1, "unit": "units",
+        "micro": None, "micro_mult": None,
+    },
+    "EURGBP=X": {
+        "ib": "EUR.GBP", "name": "EUR/GBP", "exchange": "IDEALPRO",
+        "multiplier": 1, "unit": "units",
+        "micro": None, "micro_mult": None,
+    },
+    "AUDJPY=X": {
+        "ib": "AUD.JPY", "name": "AUD/JPY", "exchange": "IDEALPRO",
+        "multiplier": 1, "unit": "units",
+        "micro": None, "micro_mult": None,
+    },
+    "EURAUD=X": {
+        "ib": "EUR.AUD", "name": "EUR/AUD", "exchange": "IDEALPRO",
+        "multiplier": 1, "unit": "units",
+        "micro": None, "micro_mult": None,
+    },
+    "GBPAUD=X": {
+        "ib": "GBP.AUD", "name": "GBP/AUD", "exchange": "IDEALPRO",
+        "multiplier": 1, "unit": "units",
+        "micro": None, "micro_mult": None,
+    },
+    "AUDNZD=X": {
+        "ib": "AUD.NZD", "name": "AUD/NZD", "exchange": "IDEALPRO",
+        "multiplier": 1, "unit": "units",
+        "micro": None, "micro_mult": None,
+    },
+    "CADJPY=X": {
+        "ib": "CAD.JPY", "name": "CAD/JPY", "exchange": "IDEALPRO",
+        "multiplier": 1, "unit": "units",
+        "micro": None, "micro_mult": None,
+    },
+    # ── Crypto (Phase 20) — trade via Binance/Kraken; IB crypto shown as reference ──
+    # IB offers crypto via PAXOS/IBKR Crypto; for small capital use exchange directly.
+    # multiplier=1, fractional=True: position = allocation / price (no integer rounding).
+    "BTC-USD": {
+        "ib": "BTC", "name": "Bitcoin", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "BTC", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken (recommended for small capital)",
+    },
+    "ETH-USD": {
+        "ib": "ETH", "name": "Ethereum", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "ETH", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
+    "XRP-USD": {
+        "ib": "XRP", "name": "Ripple", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "XRP", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
+    "LTC-USD": {
+        "ib": "LTC", "name": "Litecoin", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "LTC", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
+    "ADA-USD": {
+        "ib": "ADA", "name": "Cardano", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "ADA", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
+    "LINK-USD": {
+        "ib": "LINK", "name": "Chainlink", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "LINK", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
+    "DOGE-USD": {
+        "ib": "DOGE", "name": "Dogecoin", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "DOGE", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
+    "SOL-USD": {
+        "ib": "SOL", "name": "Solana", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "SOL", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
+    "AVAX-USD": {
+        "ib": "AVAX", "name": "Avalanche", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "AVAX", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
+    "DOT-USD": {
+        "ib": "DOT", "name": "Polkadot", "exchange": "PAXOS",
+        "multiplier": 1, "unit": "DOT", "fractional": True,
+        "micro": None, "micro_mult": None,
+        "alt_exchange": "Binance/Kraken",
+    },
     # ── Equity sector ETFs ────────────────────────────────────────────────────
     "XLB": {
         "ib": "XLB", "name": "Materials", "exchange": "ARCA",
@@ -155,15 +259,32 @@ def ib_exchange(yf_ticker: str) -> str:
     return YFINANCE_TO_IB.get(yf_ticker, {}).get("exchange", "—")
 
 
-def contracts(yf_ticker: str, allocation: float, price: float) -> tuple[int, float, str | None]:
-    """Compute integer contract/share count and notional per contract.
+def contracts(yf_ticker: str, allocation: float, price: float) -> tuple[int | float, float, str | None]:
+    """Compute contract/share count and notional per contract.
+
+    For fractional assets (crypto), returns a float token quantity with a
+    note about the exchange. For integer-lot instruments returns (int, notional, micro_note).
 
     Returns (n_contracts, notional_per_contract, micro_note).
-    micro_note is a hint string if micro contracts exist, else None.
+    micro_note is a hint string if micro contracts exist or if exchange guidance applies.
     """
     info = YFINANCE_TO_IB.get(yf_ticker, {})
     mult = info.get("multiplier", 1)
     unit = info.get("unit", "units")
+
+    # Fractional assets (crypto) — return token quantity, no min notional
+    if info.get("fractional", False):
+        if price <= 0:
+            return 0.0, 0.0, None
+        qty = allocation / price
+        alt_exch = info.get("alt_exchange", "")
+        note = None
+        if alt_exch:
+            note = (
+                f"Fractional crypto: buy {qty:.6g} {unit} at ${price:,.4g}. "
+                f"Trade on {alt_exch} (min ~$10). IB symbol: {info.get('ib', yf_ticker)} on {info.get('exchange', '—')}."
+            )
+        return qty, price, note
 
     notional = price * mult
     if notional <= 0:
