@@ -344,16 +344,25 @@ def _hex_to_rgba(h: str, alpha: float = 0.12) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def _forecast_chart(sig, live_data, scfg: dict) -> go.Figure:
-    """Hero element: last 90d actual prices + dashed forecast projection."""
-    picks = [r for r in sig.rankings if r.position in ("LONG", "SHORT")]
-    horizon = sig.horizon
-    today = sig.date
+def _forecast_subplots(picks_with_horizon: list[tuple], live_data) -> list[go.Figure]:
+    """Return one Plotly figure per (AssetRanking, horizon) pair.
 
-    fig = go.Figure()
-    shown_legend: set[str] = set()
+    Each figure shows:
+      - Solid line: last 90 days of actual prices
+      - Dashed line: forecast from today to today+horizon
+      - Shaded ±1σ band (σ = std of predicted returns across all picks)
+      - Annotation showing predicted return as a percentage
+    Y-axis is zoomed to [min_90d, max(max_90d, proj_price)] ± 5% padding.
+    """
+    if not picks_with_horizon:
+        return []
 
-    for r in picks:
+    # Pre-compute σ across all picks for the uncertainty band
+    all_preds = [r.predicted_return for r, _ in picks_with_horizon if np.isfinite(r.predicted_return)]
+    sigma_r = float(np.std(all_preds)) if len(all_preds) > 1 else 0.01
+
+    figs = []
+    for r, horizon in picks_with_horizon:
         ticker = r.ticker
         if ticker not in live_data.prices:
             continue
@@ -362,38 +371,20 @@ def _forecast_chart(sig, live_data, scfg: dict) -> go.Figure:
             continue
 
         colour = _POS_COLOUR[r.position]
-        name = FOREX_NAMES.get(ticker, r.name)
-        show_leg = r.position not in shown_legend
-        if show_leg:
-            shown_legend.add(r.position)
+        name   = FOREX_NAMES.get(ticker, r.name)
 
-        # Actual price history (solid)
-        fig.add_trace(go.Scatter(
-            x=close.index, y=close.values,
-            mode="lines",
-            line=dict(color=colour, width=2),
-            name=f"{name} ({r.position})",
-            legendgroup=ticker,
-            hovertemplate=f"<b>{name}</b><br>%{{x|%Y-%m-%d}}<br>%{{y:,.4f}}<extra></extra>",
-        ))
-
-        # Forecast projection (dashed)
         current_price = float(close.iloc[-1])
         pred_return   = r.predicted_return
         proj_price    = current_price * np.exp(pred_return)
+        pred_pct      = (np.exp(pred_return) - 1) * 100  # % change
 
-        # Business-day dates from today → today + horizon
+        # Forecast dates and prices
         try:
-            fd_start = pd.Timestamp(today)
-            forecast_dates = pd.bdate_range(fd_start, periods=horizon + 1)
+            forecast_dates  = pd.bdate_range(pd.Timestamp(close.index[-1]), periods=horizon + 1)
         except Exception:
             continue
-
         forecast_prices = np.linspace(current_price, proj_price, len(forecast_dates))
 
-        # Uncertainty band: ±σ of pred return across assets (rough proxy)
-        all_preds = [rr.predicted_return for rr in sig.rankings if np.isfinite(rr.predicted_return)]
-        sigma_r = float(np.std(all_preds)) if len(all_preds) > 1 else 0.01
         upper_prices = current_price * np.exp(
             np.linspace(0, pred_return + sigma_r, len(forecast_dates))
         )
@@ -401,38 +392,79 @@ def _forecast_chart(sig, live_data, scfg: dict) -> go.Figure:
             np.linspace(0, pred_return - sigma_r, len(forecast_dates))
         )
 
-        # Shaded band
+        # Y-axis range: zoom to actual + forecast range with 5% padding
+        y_min = min(float(close.min()), float(lower_prices.min()))
+        y_max = max(float(close.max()), float(upper_prices.max()))
+        pad   = (y_max - y_min) * 0.05 if y_max > y_min else abs(y_max) * 0.05 + 1e-8
+        y_range = [y_min - pad, y_max + pad]
+
+        fig = go.Figure()
+
+        # Actual history (solid)
+        fig.add_trace(go.Scatter(
+            x=close.index, y=close.values,
+            mode="lines",
+            line=dict(color="#555555", width=1.8),
+            name="Actual",
+            hovertemplate="%{x|%Y-%m-%d}<br>%{y:,.4g}<extra>Actual</extra>",
+        ))
+
+        # Shaded uncertainty band
         fill_colour = _hex_to_rgba(colour) if colour.startswith("#") else colour
         fig.add_trace(go.Scatter(
             x=list(forecast_dates) + list(forecast_dates[::-1]),
-            y=list(upper_prices) + list(lower_prices[::-1]),
+            y=list(upper_prices)   + list(lower_prices[::-1]),
             fill="toself",
             fillcolor=fill_colour,
             line=dict(color="rgba(0,0,0,0)"),
             showlegend=False,
-            legendgroup=ticker,
             hoverinfo="skip",
         ))
 
         # Dashed forecast line
+        sign = "+" if pred_pct >= 0 else ""
         fig.add_trace(go.Scatter(
             x=forecast_dates, y=forecast_prices,
             mode="lines",
             line=dict(color=colour, width=2.5, dash="dash"),
-            name=f"{name} forecast",
-            legendgroup=ticker,
+            name=f"Forecast ({sign}{pred_pct:.2f}%)",
             hovertemplate=(
-                f"<b>{name} forecast</b><br>%{{x|%Y-%m-%d}}<br>%{{y:,.4f}}"
-                f"<br>Pred return: {pred_return:+.4f}<extra></extra>"
+                f"%{{x|%Y-%m-%d}}<br>%{{y:,.4g}}"
+                f"<br>Pred: {sign}{pred_pct:.2f}% over {horizon}d<extra>Forecast</extra>"
             ),
         ))
 
-    fig.update_layout(
-        **_LAYOUT,
-        title=f"Price history + {horizon}d forward projection",
-        height=420,
-    )
-    return fig
+        # Annotation: predicted return as text on chart
+        fig.add_annotation(
+            x=forecast_dates[-1],
+            y=proj_price,
+            text=f"<b>{sign}{pred_pct:.2f}%</b> over {horizon}d",
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor=colour,
+            font=dict(color=colour, size=12),
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor=colour,
+            borderwidth=1,
+            ax=-60, ay=-30,
+        )
+
+        subplot_title = f"{name} — {r.position}  (h={horizon}d)"
+        fig.update_layout(
+            **_LAYOUT,
+            title=subplot_title,
+            height=300,
+            yaxis=dict(
+                showgrid=True,
+                gridcolor="rgba(128,128,128,0.2)",
+                range=y_range,
+                tickformat=".4g",
+            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        figs.append(fig)
+
+    return figs
 
 
 def _render_single(sig, live_data, scfg: dict, name: str) -> None:
@@ -451,7 +483,7 @@ def _render_single(sig, live_data, scfg: dict, name: str) -> None:
     st.dataframe(_ranking_table(sig.rankings), use_container_width=True)
     st.caption("LONG = top-2 predicted return  |  SHORT = bottom-2  |  FLAT = middle")
 
-    # ── HERO: forward forecast chart ─────────────────────────────────────────
+    # ── HERO: forward forecast subplots ──────────────────────────────────────
     picks = [r for r in sig.rankings if r.position in ("LONG", "SHORT")]
     if picks and live_data is not None:
         st.divider()
@@ -461,14 +493,21 @@ def _render_single(sig, live_data, scfg: dict, name: str) -> None:
             f"Historical accuracy (CS-RIC): {scfg['backtest_cs_ric']:+.3f}. "
             "Research tooling only — not investment advice.**"
         )
-        fig = _forecast_chart(sig, live_data, scfg)
-        st.plotly_chart(fig, use_container_width=True)
+        picks_with_horizon = [(r, sig.horizon) for r in picks]
+        figs = _forecast_subplots(picks_with_horizon, live_data)
+        # Render two per row
+        for i in range(0, len(figs), 2):
+            row_cols = st.columns(min(2, len(figs) - i))
+            for j, col in enumerate(row_cols):
+                with col:
+                    st.plotly_chart(figs[i + j], use_container_width=True)
 
         st.caption(
-            "Solid line = last 90 trading days of actual prices. "
-            "Dashed line = linear interpolation to projected price "
-            f"(current × exp(pred_return)) over {sig.horizon} business days. "
-            "Shaded band = ±1σ of predicted returns across all assets in this signal."
+            "Gray solid = last 90 trading days of actual prices. "
+            f"Colored dashed = forecast over {sig.horizon} business days "
+            "(current price × exp(pred_return)). "
+            "Shaded band = ±1σ of predicted returns across all picks. "
+            "Y-axis zoomed to actual + forecast range."
         )
 
     # ── Historical equity curve ───────────────────────────────────────────────
@@ -565,9 +604,9 @@ def _render_ensemble(sig_a, sig_b, weights, live_data, scfg: dict) -> None:
     st.dataframe(styled, use_container_width=True)
     st.caption("Blend score = w_commodity × commodity_signal + w_forex × forex_signal")
 
-    # Forward forecast for each sub-signal
+    # Forward forecast — separate subplots per pick, horizon per asset class
     st.divider()
-    tab_comm, tab_forex = st.tabs(["Commodity picks", "Forex picks"])
+    tab_comm, tab_forex = st.tabs(["Commodity picks (h=63)", "Forex picks (h=5)"])
 
     with tab_comm:
         comm_picks = [r for r in sig_a.rankings if r.position in ("LONG", "SHORT")]
@@ -575,13 +614,16 @@ def _render_ensemble(sig_a, sig_b, weights, live_data, scfg: dict) -> None:
             st.warning(
                 "**Projected prices are model estimates. Research tooling only — not investment advice.**"
             )
-            fig = _forecast_chart(sig_a, live_data, SIGNALS["Commodity LightGBM h=63"])
-            st.plotly_chart(fig, use_container_width=True)
+            figs = _forecast_subplots([(r, 63) for r in comm_picks], live_data)
+            for i in range(0, len(figs), 2):
+                row_cols = st.columns(min(2, len(figs) - i))
+                for j, col in enumerate(row_cols):
+                    with col:
+                        st.plotly_chart(figs[i + j], use_container_width=True)
 
     with tab_forex:
-        # live_data for forex not directly available in ensemble; note limitation
         st.info(
-            "Forex forecast charts require separate live data fetch. "
+            "Forex forecast charts require a separate live data fetch. "
             "Run the **Forex LightGBM h=5** signal directly to see forex projections."
         )
 
