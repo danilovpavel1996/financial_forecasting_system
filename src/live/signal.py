@@ -53,9 +53,18 @@ _NAMES: dict[str, str] = {
     "XLY": "Cons. Disc.",
 }
 
-# Position thresholds (top-2 long, bottom-2 short out of 9)
-_N_LONG = 2
-_N_SHORT = 2
+def _n_long_short(n_assets: int) -> tuple[int, int]:
+    """Return (n_long, n_short) matching the backtest pipeline rule.
+
+    ≥9 assets → 3/3  (15-pair forex, 10-token crypto)
+    ≥6 assets → 2/2  (7-pair forex, 9-asset commodity/sector)
+    <6 assets → 1/1
+    """
+    if n_assets >= 9:
+        return 3, 3
+    if n_assets >= 6:
+        return 2, 2
+    return 1, 1
 
 
 @dataclasses.dataclass
@@ -180,8 +189,9 @@ def generate_signal(
 
     # ── Ranking and positions ─────────────────────────────────────────────────
     sorted_tickers = sorted(ranked, key=lambda t: preds[t], reverse=True)
-    long_set  = set(sorted_tickers[:_N_LONG])
-    short_set = set(sorted_tickers[-_N_SHORT:])
+    n_long, n_short = _n_long_short(len(ranked))
+    long_set  = set(sorted_tickers[:n_long])
+    short_set = set(sorted_tickers[-n_short:])
 
     rankings: list[AssetRanking] = []
     for i, ticker in enumerate(sorted_tickers):
