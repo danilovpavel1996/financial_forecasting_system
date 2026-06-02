@@ -319,22 +319,92 @@ def _colour_position(val):
     return f"color: {c}; font-weight: bold" if c else ""
 
 
-def _ranking_table(rankings):
-    """Build a styled ranking DataFrame."""
+def _action_from_position(pos: str) -> str:
+    return {"LONG": "BUY", "SHORT": "SELL", "FLAT": "HOLD"}.get(pos, "HOLD")
+
+
+def _ranking_table(rankings, live_data=None, sig_date=None, horizon: int = 63):
+    """Build a styled ranking DataFrame with trading columns."""
     rows = []
     for r in rankings:
         name = FOREX_NAMES.get(r.ticker, r.name)
+        action = _action_from_position(r.position)
+        pred_pct = (np.exp(r.predicted_return) - 1) * 100
+
+        # Entry price: today's close if available
+        entry_price = np.nan
+        if live_data is not None and r.ticker in live_data.prices:
+            close = live_data.prices[r.ticker]["Close"].dropna()
+            if len(close):
+                entry_price = float(close.iloc[-1])
+
+        target_price = entry_price * np.exp(r.predicted_return) if np.isfinite(entry_price) else np.nan
+
+        # Review date: entry_date + horizon business days
+        if sig_date is not None:
+            review_dates = pd.bdate_range(pd.Timestamp(sig_date), periods=horizon + 1)
+            review_date = str(review_dates[-1].date())
+        else:
+            review_date = "—"
+
+        entry_str  = f"{entry_price:,.4g}"  if np.isfinite(entry_price)  else "N/A"
+        target_str = f"{target_price:,.4g}" if np.isfinite(target_price) else "N/A"
+
         rows.append({
-            "Rank": r.rank,
-            "Ticker": r.ticker,
-            "Name": name,
-            "Position": r.position,
-            "Pred. return": f"{r.predicted_return:+.4f}",
-            "Mom 5d": f"{r.recent_mom_5d:+.2%}" if np.isfinite(r.recent_mom_5d) else "N/A",
-            "EWMA vol": f"{r.current_vol:.1%}" if np.isfinite(r.current_vol) else "N/A",
+            "Rank":            r.rank,
+            "Ticker":          r.ticker,
+            "Name":            name,
+            "Action":          action,
+            "Entry price":     entry_str,
+            "Target price":    target_str,
+            "Exp. return":     f"{pred_pct:+.2f}%",
+            "Entry date":      str(sig_date) if sig_date else "—",
+            "Review date":     review_date,
+            "Horizon (d)":     horizon,
+            "Mom 5d":          f"{r.recent_mom_5d:+.2%}" if np.isfinite(r.recent_mom_5d) else "N/A",
+            "EWMA vol":        f"{r.current_vol:.1%}"    if np.isfinite(r.current_vol)  else "N/A",
         })
+
     df = pd.DataFrame(rows).set_index("Rank")
-    return df.style.map(_colour_position, subset=["Position"])
+
+    _ACTION_COLOUR = {"BUY": f"color: {_POS_COLOUR['LONG']}; font-weight: bold",
+                      "SELL": f"color: {_POS_COLOUR['SHORT']}; font-weight: bold",
+                      "HOLD": f"color: {_POS_COLOUR['FLAT']}"}
+
+    def _colour_action(val):
+        return _ACTION_COLOUR.get(str(val), "")
+
+    return df.style.map(_colour_action, subset=["Action"])
+
+
+def _action_summary(rankings, live_data, sig_date, horizon: int) -> str:
+    """Return a markdown string listing BUY/SELL lines for LONG/SHORT picks."""
+    lines = []
+    review_dates = pd.bdate_range(pd.Timestamp(sig_date), periods=horizon + 1)
+    review_date = str(review_dates[-1].date())
+    for r in rankings:
+        if r.position not in ("LONG", "SHORT"):
+            continue
+        action = _action_from_position(r.position)
+        name = FOREX_NAMES.get(r.ticker, r.name)
+        pred_pct = (np.exp(r.predicted_return) - 1) * 100
+        sign = "+" if pred_pct >= 0 else ""
+
+        entry_str = target_str = "N/A"
+        if live_data is not None and r.ticker in live_data.prices:
+            close = live_data.prices[r.ticker]["Close"].dropna()
+            if len(close):
+                entry = float(close.iloc[-1])
+                target = entry * np.exp(r.predicted_return)
+                entry_str  = f"{entry:,.4g}"
+                target_str = f"{target:,.4g}"
+
+        lines.append(
+            f"**{action} {r.ticker}** ({name}) "
+            f"at {entry_str} → target {target_str} "
+            f"by {review_date} ({sign}{pred_pct:.2f}%)"
+        )
+    return "\n\n".join(lines) if lines else "_No LONG/SHORT picks._"
 
 
 def _hex_to_rgba(h: str, alpha: float = 0.12) -> str:
@@ -434,19 +504,25 @@ def _forecast_subplots(picks_with_horizon: list[tuple], live_data) -> list[go.Fi
             ),
         ))
 
-        # Annotation: predicted return as text on chart
+        # Annotation: relative-to-basket message
+        rel_word = "OUTPERFORM" if pred_return >= 0 else "UNDERPERFORM"
+        annotation_text = (
+            f"<b>Model says:</b> {rel_word} basket<br>"
+            f"by <b>{sign}{pred_pct:.2f}%</b> over {horizon} trading days"
+        )
         fig.add_annotation(
             x=forecast_dates[-1],
             y=proj_price,
-            text=f"<b>{sign}{pred_pct:.2f}%</b> over {horizon}d",
+            text=annotation_text,
             showarrow=True,
             arrowhead=2,
             arrowcolor=colour,
-            font=dict(color=colour, size=12),
-            bgcolor="rgba(255,255,255,0.8)",
+            font=dict(color=colour, size=11),
+            bgcolor="rgba(255,255,255,0.85)",
             bordercolor=colour,
             borderwidth=1,
-            ax=-60, ay=-30,
+            ax=-80, ay=-40,
+            align="left",
         )
 
         subplot_title = f"{name} — {r.position}  (h={horizon}d)"
@@ -478,11 +554,27 @@ def _render_single(sig, live_data, scfg: dict, name: str) -> None:
 
     # Ranking table
     st.subheader(f"Today's Ranking — {sig.model_name}  (h={sig.horizon}d)")
-    st.dataframe(_ranking_table(sig.rankings), use_container_width=True)
-    st.caption("LONG = top-2 predicted return  |  SHORT = bottom-2  |  FLAT = middle")
+    st.dataframe(
+        _ranking_table(sig.rankings, live_data=live_data, sig_date=sig.date, horizon=sig.horizon),
+        use_container_width=True,
+    )
+    st.caption("Action: BUY=LONG / SELL=SHORT / HOLD=FLAT  |  "
+               "Target = entry × exp(pred_return)  |  "
+               "Review date = entry + horizon business days")
+
+    # ── Action Summary ────────────────────────────────────────────────────────
+    picks = [r for r in sig.rankings if r.position in ("LONG", "SHORT")]
+    if picks and live_data is not None:
+        st.divider()
+        st.subheader("Action Summary")
+        summary_md = _action_summary(sig.rankings, live_data, sig.date, sig.horizon)
+        st.markdown(summary_md)
+        st.caption(
+            "Action summary is for research reference only. "
+            "These are model estimates, not trading recommendations."
+        )
 
     # ── HERO: forward forecast subplots ──────────────────────────────────────
-    picks = [r for r in sig.rankings if r.position in ("LONG", "SHORT")]
     if picks and live_data is not None:
         st.divider()
         st.subheader("Forward Forecast — LONG & SHORT picks")
