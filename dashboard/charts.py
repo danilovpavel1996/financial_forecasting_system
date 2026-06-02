@@ -316,5 +316,5 @@ def style_comparison_table(df: pd.DataFrame, leakage_ric: float = 0.15,
     styled = df.style.apply(_highlight, axis=0)
     for col in df.columns:
         if col in ("mean_CS_RIC", "Sharpe_net"):
-            styled = styled.applymap(_flag_leakage, subset=[col])
+            styled = styled.map(_flag_leakage, subset=[col])
     return styled
