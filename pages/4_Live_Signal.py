@@ -71,6 +71,23 @@ with st.sidebar:
     train_btn = st.button("🔁 Retrain Model", use_container_width=True,
                           disabled=(sig_cfg.get("model", "") not in ("LightGBM",)))
     st.divider()
+
+    st.subheader("Portfolio Simulator")
+    sim_capital = st.number_input(
+        "Starting capital ($)",
+        min_value=100.0, max_value=10_000_000.0, value=1_000.0, step=100.0,
+        format="%.0f",
+    )
+    sim_platform = st.radio(
+        "Platform type",
+        ["Long-only", "Long-Short (futures/CFD)"],
+        index=0,
+        help=(
+            "Long-only: allocate capital only to BUY positions.\n\n"
+            "Long-Short: allocate capital to both BUY and SELL positions."
+        ),
+    )
+    st.divider()
     st.caption("⚠️ Research tooling — not investment advice.")
 
 # ── Session state ─────────────────────────────────────────────────────────────
@@ -541,6 +558,151 @@ def _forecast_subplots(picks_with_horizon: list[tuple], live_data) -> list[go.Fi
     return figs
 
 
+def _portfolio_positions(
+    rankings_with_horizon: list[tuple],   # [(AssetRanking, horizon, leg_capital), ...]
+    live_data,
+    long_only: bool,
+    sig_date,
+) -> list[dict]:
+    """Compute position rows for the portfolio simulator.
+
+    rankings_with_horizon: list of (ranking, horizon, leg_capital) tuples.
+    Each leg_capital is the dollar amount allocated to that sub-universe leg.
+    Within a leg, capital is split equally across LONG picks (and SHORT picks
+    in long-short mode).
+    """
+    # Group by leg_capital so we can split within each leg independently
+    from collections import defaultdict
+    legs: dict[float, list[tuple]] = defaultdict(list)
+    for r, h, cap in rankings_with_horizon:
+        legs[cap].append((r, h))
+
+    rows = []
+    for cap, items in legs.items():
+        long_picks  = [(r, h) for r, h in items if r.position == "LONG"]
+        short_picks = [(r, h) for r, h in items if r.position == "SHORT"]
+
+        active = long_picks if long_only else long_picks + short_picks
+        if not active:
+            continue
+        per_pos = cap / len(active)
+
+        for r, h in active:
+            action = _action_from_position(r.position)
+            name   = FOREX_NAMES.get(r.ticker, r.name)
+            pred_pct = (np.exp(r.predicted_return) - 1) * 100
+            sign     = "+" if pred_pct >= 0 else ""
+
+            entry_price = target_price = np.nan
+            if live_data is not None and r.ticker in live_data.prices:
+                close = live_data.prices[r.ticker]["Close"].dropna()
+                if len(close):
+                    entry_price  = float(close.iloc[-1])
+                    target_price = entry_price * np.exp(r.predicted_return)
+
+            expected_pnl = per_pos * (np.exp(r.predicted_return) - 1)
+
+            review_dates = pd.bdate_range(pd.Timestamp(sig_date), periods=h + 1)
+            review_date  = str(review_dates[-1].date())
+
+            rows.append({
+                "Ticker":          r.ticker,
+                "Name":            name,
+                "Action":          action,
+                "Allocation ($)":  round(per_pos, 2),
+                "Entry price":     f"{entry_price:,.4g}"  if np.isfinite(entry_price)  else "N/A",
+                "Target price":    f"{target_price:,.4g}" if np.isfinite(target_price) else "N/A",
+                "Exp. return":     f"{sign}{pred_pct:.2f}%",
+                "Exp. P&L ($)":    round(expected_pnl, 2),
+                "Entry date":      str(sig_date),
+                "Review date":     review_date,
+                "_pred_return":    r.predicted_return,   # kept for totals, dropped in display
+            })
+
+    return rows
+
+
+def _render_portfolio_sim(
+    rankings_with_horizon: list[tuple],
+    live_data,
+    capital: float,
+    long_only: bool,
+    sig_date,
+    scfg: dict,
+    is_ensemble: bool = False,
+) -> None:
+    """Render the Portfolio Simulator section."""
+    st.divider()
+    st.subheader("Portfolio Simulator")
+
+    rows = _portfolio_positions(rankings_with_horizon, live_data, long_only, sig_date)
+
+    if not rows:
+        st.info("No active positions to display (no LONG picks, or Long-only mode with no LONGs).")
+        return
+
+    display_cols = [
+        "Ticker", "Name", "Action", "Allocation ($)",
+        "Entry price", "Target price", "Exp. return", "Exp. P&L ($)",
+        "Entry date", "Review date",
+    ]
+    df = pd.DataFrame(rows)[display_cols]
+
+    _ACTION_COLOUR = {
+        "BUY":  f"color: {_POS_COLOUR['LONG']}; font-weight: bold",
+        "SELL": f"color: {_POS_COLOUR['SHORT']}; font-weight: bold",
+    }
+
+    def _col_action(val):
+        return _ACTION_COLOUR.get(str(val), "")
+
+    st.dataframe(df.style.map(_col_action, subset=["Action"]), use_container_width=True)
+
+    # Totals
+    total_pnl      = sum(r["Exp. P&L ($)"] for r in rows)
+    total_alloc    = sum(r["Allocation ($)"] for r in rows)
+    total_ret_pct  = (total_pnl / total_alloc * 100) if total_alloc else 0.0
+    sign_tot       = "+" if total_pnl >= 0 else ""
+
+    col1, col2 = st.columns(2)
+    col1.metric("Total expected P&L", f"${total_pnl:+,.2f}",
+                delta=f"{sign_tot}{total_ret_pct:.2f}% on deployed capital")
+
+    # Annualised return estimate from Sharpe and target vol (10%)
+    backtest_sharpe = scfg.get("backtest_sharpe", float("nan"))
+    target_vol      = 0.10   # 10% annualised vol target used in backtests
+    if np.isfinite(backtest_sharpe):
+        ann_return_est = backtest_sharpe * target_vol * 100
+        col2.metric("Ann. return estimate (Sharpe × vol)",
+                    f"{ann_return_est:+.1f}%/yr",
+                    help=f"backtest_sharpe ({backtest_sharpe:.2f}) × target_vol (10%). "
+                         "Not a forward-looking guarantee.")
+    else:
+        col2.metric("Ann. return estimate", "N/A")
+
+    # Rebalance dates
+    st.markdown("**Next rebalance dates:**")
+    if is_ensemble:
+        comm_dates  = pd.bdate_range(pd.Timestamp(sig_date), periods=64)
+        forex_dates = pd.bdate_range(pd.Timestamp(sig_date), periods=6)
+        st.markdown(
+            f"- Commodity leg (h=63): **{comm_dates[-1].date()}**\n"
+            f"- Forex leg (h=5): **{forex_dates[-1].date()}**"
+        )
+    else:
+        h = rankings_with_horizon[0][1] if rankings_with_horizon else 63
+        reb_dates = pd.bdate_range(pd.Timestamp(sig_date), periods=h + 1)
+        st.markdown(f"- All positions: **{reb_dates[-1].date()}** ({h} business days)")
+
+    # Disclaimer
+    st.error(
+        "**DISCLAIMER:** This simulator shows hypothetical position sizing based on model "
+        "estimates. It is **NOT a trading recommendation**. Past backtest performance "
+        f"(Sharpe {backtest_sharpe:.2f}) does not guarantee future results. "
+        "Consult a financial advisor before investing real money."
+    )
+
+
 def _render_single(sig, live_data, scfg: dict, name: str) -> None:
     """Render a single-signal view."""
     # Header metrics
@@ -622,6 +784,17 @@ def _render_single(sig, live_data, scfg: dict, name: str) -> None:
             "Vol scale < 1 means current vol is above target — positions would be "
             "reduced if vol-targeting were applied. Signal shows unscaled ranks."
         )
+
+    # ── Portfolio Simulator ───────────────────────────────────────────────────
+    _render_portfolio_sim(
+        rankings_with_horizon=[(r, sig.horizon, sim_capital) for r in sig.rankings],
+        live_data=live_data,
+        capital=sim_capital,
+        long_only=(sim_platform == "Long-only"),
+        sig_date=sig.date,
+        scfg=scfg,
+        is_ensemble=False,
+    )
 
     # ── Signal history ────────────────────────────────────────────────────────
     _render_signal_history(sig)
@@ -729,6 +902,23 @@ def _render_ensemble(sig_a, sig_b, weights, live_data, scfg: dict) -> None:
 
 *Phase 18 three-way OOS ensemble: Sharpe 1.05, ρ(commodity, forex) ≈ −0.04*
 """)
+
+    # ── Portfolio Simulator (ensemble) ───────────────────────────────────────
+    comm_capital  = sim_capital * w_a
+    forex_capital = sim_capital * w_b
+    ensemble_rankings = (
+        [(r, 63, comm_capital) for r in sig_a.rankings] +
+        [(r, 5,  forex_capital) for r in sig_b.rankings]
+    )
+    _render_portfolio_sim(
+        rankings_with_horizon=ensemble_rankings,
+        live_data=live_data,
+        capital=sim_capital,
+        long_only=(sim_platform == "Long-only"),
+        sig_date=sig_a.date,
+        scfg=scfg,
+        is_ensemble=True,
+    )
 
     _render_signal_history(sig_a)
 
