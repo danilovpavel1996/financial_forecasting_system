@@ -20,6 +20,7 @@ from src.config import load_config
 from src.data import universe
 from dashboard.charts import _COLOURS, _LAYOUT
 from dashboard.signal_configs import SIGNALS, FOREX_NAMES
+from dashboard.ib_tickers import YFINANCE_TO_IB, contracts as ib_contracts, ib_exchange, ib_symbol
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -369,7 +370,8 @@ def _ranking_table(rankings, live_data=None, sig_date=None, horizon: int = 63):
 
         rows.append({
             "Rank":            r.rank,
-            "Ticker":          r.ticker,
+            "IB Ticker":       ib_symbol(r.ticker),
+            "Exchange":        ib_exchange(r.ticker),
             "Name":            name,
             "Action":          action,
             "Entry price":     entry_str,
@@ -566,12 +568,9 @@ def _portfolio_positions(
 ) -> list[dict]:
     """Compute position rows for the portfolio simulator.
 
-    rankings_with_horizon: list of (ranking, horizon, leg_capital) tuples.
-    Each leg_capital is the dollar amount allocated to that sub-universe leg.
-    Within a leg, capital is split equally across LONG picks (and SHORT picks
-    in long-short mode).
+    Each row includes contract sizing, IB symbol, and a micro-contract note
+    for positions where the allocation is too small to buy even one contract.
     """
-    # Group by leg_capital so we can split within each leg independently
     from collections import defaultdict
     legs: dict[float, list[tuple]] = defaultdict(list)
     for r, h, cap in rankings_with_horizon:
@@ -588,10 +587,10 @@ def _portfolio_positions(
         per_pos = cap / len(active)
 
         for r, h in active:
-            action = _action_from_position(r.position)
-            name   = FOREX_NAMES.get(r.ticker, r.name)
-            pred_pct = (np.exp(r.predicted_return) - 1) * 100
-            sign     = "+" if pred_pct >= 0 else ""
+            action    = _action_from_position(r.position)
+            name      = FOREX_NAMES.get(r.ticker, r.name)
+            pred_pct  = (np.exp(r.predicted_return) - 1) * 100
+            sign      = "+" if pred_pct >= 0 else ""
 
             entry_price = target_price = np.nan
             if live_data is not None and r.ticker in live_data.prices:
@@ -605,18 +604,39 @@ def _portfolio_positions(
             review_dates = pd.bdate_range(pd.Timestamp(sig_date), periods=h + 1)
             review_date  = str(review_dates[-1].date())
 
+            # Contract sizing
+            n_contracts  = None
+            notional_per = None
+            micro_note   = None
+            contracts_str = "N/A"
+            if np.isfinite(entry_price):
+                n_contracts, notional_per, micro_note = ib_contracts(
+                    r.ticker, per_pos, entry_price
+                )
+                if n_contracts == 0:
+                    contracts_str = "0 ⚠️"
+                else:
+                    contracts_str = str(n_contracts)
+
             rows.append({
-                "Ticker":          r.ticker,
-                "Name":            name,
-                "Action":          action,
-                "Allocation ($)":  round(per_pos, 2),
-                "Entry price":     f"{entry_price:,.4g}"  if np.isfinite(entry_price)  else "N/A",
-                "Target price":    f"{target_price:,.4g}" if np.isfinite(target_price) else "N/A",
-                "Exp. return":     f"{sign}{pred_pct:.2f}%",
-                "Exp. P&L ($)":    round(expected_pnl, 2),
-                "Entry date":      str(sig_date),
-                "Review date":     review_date,
-                "_pred_return":    r.predicted_return,   # kept for totals, dropped in display
+                "IB Ticker":      ib_symbol(r.ticker),
+                "Exchange":       ib_exchange(r.ticker),
+                "Name":           name,
+                "Action":         action,
+                "Allocation ($)": round(per_pos, 2),
+                "Entry price":    f"{entry_price:,.4g}"  if np.isfinite(entry_price)  else "N/A",
+                "Target price":   f"{target_price:,.4g}" if np.isfinite(target_price) else "N/A",
+                "Exp. return":    f"{sign}{pred_pct:.2f}%",
+                "Contracts":      contracts_str,
+                "Exp. P&L ($)":   round(expected_pnl, 2),
+                "Entry date":     str(sig_date),
+                "Review date":    review_date,
+                # Internal fields used in render but not shown in table
+                "_pred_return":   r.predicted_return,
+                "_position":      r.position,
+                "_notional_per":  notional_per,
+                "_micro_note":    micro_note,
+                "_n_contracts":   n_contracts,
             })
 
     return rows
@@ -641,10 +661,20 @@ def _render_portfolio_sim(
         st.info("No active positions to display (no LONG picks, or Long-only mode with no LONGs).")
         return
 
+    # ── FIX 1: negative-return LONG warning ──────────────────────────────────
+    long_rows = [r for r in rows if r["_position"] == "LONG"]
+    if long_rows and all(r["_pred_return"] < 0 for r in long_rows):
+        st.warning(
+            "⚠️ **All LONG picks have negative predicted returns.** "
+            "The model ranks these as 'least bad' relative to peers, not as expected gainers. "
+            "Consider reducing position size or waiting for a signal with positive predicted returns."
+        )
+
+    # ── Position table ────────────────────────────────────────────────────────
     display_cols = [
-        "Ticker", "Name", "Action", "Allocation ($)",
-        "Entry price", "Target price", "Exp. return", "Exp. P&L ($)",
-        "Entry date", "Review date",
+        "IB Ticker", "Exchange", "Name", "Action", "Allocation ($)",
+        "Entry price", "Target price", "Exp. return", "Contracts",
+        "Exp. P&L ($)", "Entry date", "Review date",
     ]
     df = pd.DataFrame(rows)[display_cols]
 
@@ -658,19 +688,47 @@ def _render_portfolio_sim(
 
     st.dataframe(df.style.map(_col_action, subset=["Action"]), use_container_width=True)
 
-    # Totals
-    total_pnl      = sum(r["Exp. P&L ($)"] for r in rows)
-    total_alloc    = sum(r["Allocation ($)"] for r in rows)
-    total_ret_pct  = (total_pnl / total_alloc * 100) if total_alloc else 0.0
-    sign_tot       = "+" if total_pnl >= 0 else ""
+    # ── Micro-contract notes for zero-contract positions ──────────────────────
+    micro_notes = [(r["IB Ticker"], r["_micro_note"]) for r in rows if r["_micro_note"]]
+    if micro_notes:
+        with st.expander("⚠️ Underfunded positions — contract sizing notes"):
+            for ib_tkr, note in micro_notes:
+                st.caption(f"**{ib_tkr}:** {note}")
 
+    # ── Min capital needed box ────────────────────────────────────────────────
+    min_capital_parts = []
+    for r in rows:
+        np_val = r["_notional_per"]
+        if np_val and np.isfinite(np_val) and np_val > 1:
+            min_capital_parts.append(f"{r['IB Ticker']}: ${np_val:,.0f}")
+    if min_capital_parts:
+        min_total = sum(
+            r["_notional_per"] for r in rows
+            if r["_notional_per"] and np.isfinite(r["_notional_per"]) and r["_notional_per"] > 1
+        )
+        st.info(
+            f"**Min capital to trade 1 contract of each pick: ~${min_total:,.0f}**  \n"
+            + "  \n".join(min_capital_parts)
+        )
+
+    # ── Totals ────────────────────────────────────────────────────────────────
+    total_pnl     = sum(r["Exp. P&L ($)"] for r in rows)
+    total_alloc   = sum(r["Allocation ($)"] for r in rows)
+    total_ret_pct = (total_pnl / total_alloc * 100) if total_alloc else 0.0
+    sign_tot      = "+" if total_pnl >= 0 else ""
+
+    backtest_sharpe = scfg.get("backtest_sharpe", float("nan"))
     col1, col2 = st.columns(2)
     col1.metric("Total expected P&L", f"${total_pnl:+,.2f}",
                 delta=f"{sign_tot}{total_ret_pct:.2f}% on deployed capital")
 
-    # Annualised return estimate from Sharpe and target vol (10%)
-    backtest_sharpe = scfg.get("backtest_sharpe", float("nan"))
-    target_vol      = 0.10   # 10% annualised vol target used in backtests
+    if long_only and total_pnl < 0:
+        st.warning(
+            "Long-only mode shows negative expected P&L because this is a relative-ranking model. "
+            "Consider Long-Short mode for the full strategy, or wait for positive-conviction signals."
+        )
+
+    target_vol = 0.10
     if np.isfinite(backtest_sharpe):
         ann_return_est = backtest_sharpe * target_vol * 100
         col2.metric("Ann. return estimate (Sharpe × vol)",
@@ -680,7 +738,7 @@ def _render_portfolio_sim(
     else:
         col2.metric("Ann. return estimate", "N/A")
 
-    # Rebalance dates
+    # ── Rebalance dates ───────────────────────────────────────────────────────
     st.markdown("**Next rebalance dates:**")
     if is_ensemble:
         comm_dates  = pd.bdate_range(pd.Timestamp(sig_date), periods=64)
@@ -694,7 +752,7 @@ def _render_portfolio_sim(
         reb_dates = pd.bdate_range(pd.Timestamp(sig_date), periods=h + 1)
         st.markdown(f"- All positions: **{reb_dates[-1].date()}** ({h} business days)")
 
-    # Disclaimer
+    # ── Disclaimer ────────────────────────────────────────────────────────────
     st.error(
         "**DISCLAIMER:** This simulator shows hypothetical position sizing based on model "
         "estimates. It is **NOT a trading recommendation**. Past backtest performance "
