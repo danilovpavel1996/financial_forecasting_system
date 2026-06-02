@@ -450,18 +450,16 @@ def _forecast_subplots(picks_with_horizon: list[tuple], live_data) -> list[go.Fi
         )
 
         subplot_title = f"{name} — {r.position}  (h={horizon}d)"
-        fig.update_layout(
-            **_LAYOUT,
-            title=subplot_title,
-            height=300,
-            yaxis=dict(
-                showgrid=True,
-                gridcolor="rgba(128,128,128,0.2)",
-                range=y_range,
-                tickformat=".4g",
-            ),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        layout = {**_LAYOUT}
+        layout["title"] = subplot_title
+        layout["height"] = 300
+        layout["yaxis"] = dict(
+            showgrid=True,
+            gridcolor="rgba(128,128,128,0.2)",
+            range=y_range,
+            tickformat=".4g",
         )
+        fig.update_layout(**layout)
         figs.append(fig)
 
     return figs

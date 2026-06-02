@@ -56,12 +56,11 @@ def equity_curve(results: dict, skip_flat: bool = True, horizon: int = 1) -> go.
             hovertemplate="%{x|%Y-%m-%d}<br>%{y:.4f}<extra>" + name + "</extra>",
         ))
     fig.add_hline(y=1.0, line_dash="dot", line_color="rgba(128,128,128,0.5)")
-    fig.update_layout(
-        **_LAYOUT,
-        title="Cumulative Equity (net of costs)",
-        yaxis_title="Cumulative return (1 = start)",
-        xaxis_title="",
-    )
+    layout = {**_LAYOUT}
+    layout["title"] = "Cumulative Equity (net of costs)"
+    layout["yaxis_title"] = "Cumulative return (1 = start)"
+    layout["xaxis_title"] = ""
+    fig.update_layout(**layout)
     return fig
 
 
@@ -81,12 +80,11 @@ def rolling_ric_chart(results: dict, window: int = 63, skip_flat: bool = True) -
             hovertemplate="%{x|%Y-%m-%d}<br>RIC=%{y:.4f}<extra>" + name + "</extra>",
         ))
     fig.add_hline(y=0.0, line_dash="dot", line_color="rgba(128,128,128,0.5)")
-    fig.update_layout(
-        **_LAYOUT,
-        title=f"Rolling {window}-day Mean CS-RIC",
-        yaxis_title="CS-RIC (rolling mean)",
-        xaxis_title="",
-    )
+    layout = {**_LAYOUT}
+    layout["title"] = f"Rolling {window}-day Mean CS-RIC"
+    layout["yaxis_title"] = "CS-RIC (rolling mean)"
+    layout["xaxis_title"] = ""
+    fig.update_layout(**layout)
     return fig
 
 
@@ -107,12 +105,11 @@ def vol_scale_chart(results: dict, skip_flat: bool = True) -> go.Figure:
         has_data = True
     fig.add_hline(y=1.0, line_dash="dot", line_color="rgba(128,128,128,0.5)")
     fig.add_hline(y=2.0, line_dash="dash", line_color="rgba(200,80,80,0.4)")
-    fig.update_layout(
-        **_LAYOUT,
-        title="Position Scale Factor (vol targeting)",
-        yaxis_title="Scale (1 = unscaled, 2 = max leverage)",
-        xaxis_title="",
-    )
+    layout = {**_LAYOUT}
+    layout["title"] = "Position Scale Factor (vol targeting)"
+    layout["yaxis_title"] = "Scale (1 = unscaled, 2 = max leverage)"
+    layout["xaxis_title"] = ""
+    fig.update_layout(**layout)
     return fig if has_data else None
 
 
@@ -129,13 +126,12 @@ def price_chart(prices: dict, ticker: str, log_scale: bool = True) -> go.Figure:
         line=dict(color=_COLOURS[0], width=1.5),
         hovertemplate="%{x|%Y-%m-%d}<br>$%{y:,.2f}<extra></extra>",
     ))
-    fig.update_layout(
-        **_LAYOUT,
-        title=f"{ticker} — Daily Close",
-        yaxis_type="log" if log_scale else "linear",
-        yaxis_title="Price (log scale)" if log_scale else "Price",
-        xaxis_title="",
-    )
+    layout = {**_LAYOUT}
+    layout["title"] = f"{ticker} — Daily Close"
+    layout["yaxis_type"] = "log" if log_scale else "linear"
+    layout["yaxis_title"] = "Price (log scale)" if log_scale else "Price"
+    layout["xaxis_title"] = ""
+    fig.update_layout(**layout)
     return fig
 
 
@@ -166,7 +162,9 @@ def correlation_heatmap(prices: dict, tickers: list[str]) -> go.Figure:
         colorbar=dict(title="ρ"),
         hovertemplate="%{y} / %{x}<br>ρ = %{z:.3f}<extra></extra>",
     ))
-    fig.update_layout(**_LAYOUT, title="Daily Log-Return Correlations")
+    layout = {**_LAYOUT}
+    layout["title"] = "Daily Log-Return Correlations"
+    fig.update_layout(**layout)
     return fig
 
 
@@ -203,11 +201,10 @@ def cot_positioning_chart(cot_weekly: pd.DataFrame, ticker: str) -> go.Figure:
     fig.add_hline(y=0.8, line_dash="dash", line_color="rgba(200,80,80,0.4)", row=2, col=1)
     fig.add_hline(y=0.2, line_dash="dash", line_color="rgba(80,200,80,0.4)", row=2, col=1)
 
-    fig.update_layout(
-        **_LAYOUT,
-        title=f"{ticker} — COT Managed Money Positioning",
-        showlegend=True,
-    )
+    layout = {**_LAYOUT}
+    layout["title"] = f"{ticker} — COT Managed Money Positioning"
+    layout["showlegend"] = True
+    fig.update_layout(**layout)
     fig.update_yaxes(title_text="Net contracts", row=1, col=1,
                      gridcolor="rgba(128,128,128,0.2)")
     fig.update_yaxes(title_text="Percentile", row=2, col=1, range=[0, 1],
@@ -233,12 +230,11 @@ def ewma_vol_chart(ticker: str, returns: pd.Series, ewma_vol: pd.Series,
         line=dict(color=_COLOURS[0], width=2),
         hovertemplate="%{x|%Y-%m-%d}<br>%{y:.1f}%<extra>EWMA</extra>",
     ))
-    fig.update_layout(
-        **_LAYOUT,
-        title=f"{ticker} — Annualised Volatility",
-        yaxis_title="Ann. vol (%)",
-        xaxis_title="",
-    )
+    layout = {**_LAYOUT}
+    layout["title"] = f"{ticker} — Annualised Volatility"
+    layout["yaxis_title"] = "Ann. vol (%)"
+    layout["xaxis_title"] = ""
+    fig.update_layout(**layout)
     return fig
 
 
