@@ -19,6 +19,8 @@ class RunConfig:
     vol_lookback: int
     models: list[str]            # subset of pipeline model names to display
     force_refresh: bool = False
+    universe: str = "Commodities"
+    pred_avg_window: int = 1     # 1 = no averaging
 
     def pipeline_kwargs(self) -> dict:
         """Return kwargs for run_ranking_pipeline()."""
@@ -34,14 +36,32 @@ class RunConfig:
 
     def label(self) -> str:
         """Short human-readable label for session state / report filename."""
-        parts = [f"h{self.horizon}"]
+        parts = [self.universe.lower().replace(" ", "_"), f"h{self.horizon}"]
         if self.use_cot:
             parts.append("cot")
         if self.vol_target is not None:
             parts.append(f"vt{self.vol_target:.0%}")
+        if self.pred_avg_window > 1:
+            parts.append(f"pa{self.pred_avg_window}")
         return "_".join(parts)
 
 
 # Model name → pipeline factory name mapping (must match pipeline_ranking.py keys)
-ALL_MODELS = ["EqualWeight", "MomentumRank", "MeanReversion", "ElasticNet", "LightGBM"]
+ALL_MODELS = ["EqualWeight", "MomentumRank", "MeanReversion", "ElasticNet", "LightGBM", "LambdaMART"]
 DEFAULT_MODELS = ["MeanReversion", "MomentumRank", "LightGBM"]
+
+# Universe → human-readable label and baseline reference
+UNIVERSE_META = {
+    "Commodities": {
+        "label": "9 commodity futures (GC=F, SI=F, PL=F, PA=F, CL=F, NG=F, HG=F, ZC=F, ZS=F)",
+        "baseline_text": "Phase 14 OOS baseline — MeanReversion Sharpe ≈ 0.28, LightGBM h=63 Sharpe ≈ 0.79",
+    },
+    "Equity Sectors": {
+        "label": "9 SPDR sector ETFs (XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY)",
+        "baseline_text": "Phase 17 OOS baseline — MeanReversion Sharpe ≈ 0.15, LightGBM B3 h=63 Sharpe ≈ 0.41",
+    },
+    "Forex": {
+        "label": "7 major USD pairs (EURUSD=X, GBPUSD=X, USDJPY=X, AUDUSD=X, USDCAD=X, USDCHF=X, NZDUSD=X)",
+        "baseline_text": "Phase 18 OOS baseline — MeanReversion Sharpe ≈ 0.05, LightGBM PredAvg21 h=5 Sharpe ≈ 0.94",
+    },
+}

@@ -30,7 +30,7 @@ from dashboard.charts import (
     style_comparison_table,
     vol_scale_chart,
 )
-from dashboard.config_override import ALL_MODELS, DEFAULT_MODELS, RunConfig
+from dashboard.config_override import ALL_MODELS, DEFAULT_MODELS, UNIVERSE_META, RunConfig
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
@@ -53,10 +53,19 @@ ranked = universe.ranked_tickers(cfg)
 
 with st.sidebar:
     st.title("📊 Forecast Research")
-    st.caption("Daily commodity ranking system")
+    st.caption("Daily return forecasting research system")
     st.divider()
 
     st.subheader("Experiment settings")
+
+    universe_choice = st.radio(
+        "Universe",
+        list(UNIVERSE_META.keys()),
+        index=0,
+        help="Select the asset universe to run the backtest on.",
+    )
+    _uni_meta = UNIVERSE_META[universe_choice]
+    st.caption(_uni_meta["label"])
 
     horizon = st.select_slider(
         "Horizon (trading days)",
@@ -64,6 +73,24 @@ with st.sidebar:
         value=5,
         help="Forward return horizon for targets and evaluation.",
     )
+
+    st.subheader("Prediction averaging")
+    use_pred_avg = st.checkbox(
+        "Prediction averaging (B3 variant)",
+        value=False,
+        help=(
+            "Average predictions over the last N trading days before ranking. "
+            "Phase 17 showed +0.07 Sharpe on equity sectors (h=63). "
+            "Phase 18 showed +0.22 Sharpe on forex (h=5)."
+        ),
+    )
+    pred_avg_window = 21
+    if use_pred_avg:
+        pred_avg_window = st.slider(
+            "Prediction averaging window (days)",
+            min_value=3, max_value=63, value=21, step=1,
+        )
+        st.caption(f"Will average predictions over the last {pred_avg_window} days before ranking.")
 
     st.subheader("Vol targeting")
     use_vt = st.checkbox("Enable vol targeting", value=False)
@@ -101,6 +128,7 @@ with st.sidebar:
         "Models to run",
         options=ALL_MODELS,
         default=DEFAULT_MODELS,
+        help="LambdaMART requires lightgbm ≥ 4.0 and 'lambdarank' objective.",
     )
 
     run_btn = st.button("▶  Run Backtest", type="primary", use_container_width=True)
@@ -120,6 +148,13 @@ if "run_cfg" not in st.session_state:
 if run_btn:
     if not selected_models:
         st.error("Select at least one model.")
+    elif universe_choice != "Commodities":
+        st.warning(
+            f"**{universe_choice}** universe is supported on the Live Signal page. "
+            "The Run Experiment backtester currently runs on Commodities. "
+            "Forex and Equity Sector backtests can be run from the command line via "
+            "`python scripts/run_backtest.py`. Showing commodity results."
+        )
     else:
         run_cfg = RunConfig(
             horizon=horizon,
@@ -129,6 +164,8 @@ if run_btn:
             vol_lookback=int(vol_lookback),
             models=selected_models,
             force_refresh=force_refresh,
+            universe=universe_choice,
+            pred_avg_window=pred_avg_window if use_pred_avg else 1,
         )
         with st.spinner("Running backtest… this takes ~30–60 s"):
             try:
@@ -150,12 +187,18 @@ if st.session_state.results is None:
     st.info(
         "Configure parameters in the sidebar and click **▶ Run Backtest** to start."
     )
-    st.markdown("""
+    _meta = UNIVERSE_META.get(universe_choice, {})
+    st.markdown(f"""
 **Quick guide:**
+- *Universe*: select the asset basket to backtest. Currently only Commodities runs via this page.
 - *Horizon*: how many trading days forward the model predicts returns for.
+- *Prediction averaging*: average predictions over N days before ranking (B3 variant).
 - *Vol targeting*: scales position sizes so portfolio targets a constant annual volatility.
-- *COT features*: adds CFTC positioning data (best at horizons > 5d).
-- Phase 8 baseline (h=5, no COT, no VT): **MeanReversion Sharpe ≈ 0.63**.
+- *COT features*: adds CFTC positioning data (commodities only, best at horizons > 5d).
+- *LambdaMART*: LightGBM with lambdarank objective (list-wise ranking loss).
+
+**Reference baselines:**
+{_meta.get('baseline_text', '')}
 """)
     st.stop()
 
