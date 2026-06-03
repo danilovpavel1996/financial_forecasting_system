@@ -5,12 +5,14 @@ to the last saved signal, and prints numbered MT5 instructions.
 
 Usage
 -----
-    .venv/bin/python scripts/rebalance.py
+    .venv/bin/python scripts/rebalance.py          # normal run
+    .venv/bin/python scripts/rebalance.py --force  # bypass safety checks
 
 No arguments needed. Run once per week (every 5 trading days).
 """
 from __future__ import annotations
 
+import argparse
 import datetime
 import json
 import logging
@@ -323,14 +325,54 @@ def _print_hold_summary(old: dict[str, str], new: dict[str, str]) -> None:
         print(f"  Unchanged (keep open): {sides}")
 
 
+# ── Safety checks ─────────────────────────────────────────────────────────────
+
+def _day_name(d: datetime.date) -> str:
+    return d.strftime("%A %B %-d")
+
+
+def _safety_checks(today: datetime.date) -> None:
+    """Exit early if it's not time to rebalance yet."""
+    import pandas as pd
+
+    # Check 1: already ran today
+    if _signal_path(today).exists():
+        next_reb = _next_rebalance(today)
+        print(f"⚠️  Signal already generated today ({today}). No action needed.")
+        print(f"   Next rebalance: {next_reb}  ({_day_name(next_reb)})")
+        sys.exit(0)
+
+    # Check 2: too early (previous signal's review date hasn't arrived)
+    prev = _load_previous_signal()
+    if prev:
+        sig_date = datetime.date.fromisoformat(prev["date"])
+        next_reb = _next_rebalance(sig_date)
+        if today < next_reb:
+            print(f"⚠️  Too early to rebalance. Current positions are still active.")
+            print(f"   Current positions opened: {sig_date}")
+            print(f"   Next rebalance date:      {next_reb}  ({_day_name(next_reb)})")
+            print(f"   Come back on {_day_name(next_reb)}.")
+            sys.exit(0)
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Forex MT5 rebalancer")
+    parser.add_argument("--force", action="store_true",
+                        help="Bypass safety checks (for testing)")
+    args = parser.parse_args()
+
+    today = datetime.date.today()
+
     print()
     print("Forex Portfolio Rebalancer")
     print("══════════════════════════")
-    print(f"  Date: {datetime.date.today()}")
+    print(f"  Date: {today}")
     print()
+
+    if not args.force:
+        _safety_checks(today)
 
     # 1. Load previous signal BEFORE generating new one
     prev_data = _load_previous_signal()
