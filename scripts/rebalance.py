@@ -169,11 +169,17 @@ def _signal_path(date: datetime.date) -> Path:
 
 
 def _save_forex_signal(sig) -> Path:
-    """Save forex signal as JSON; returns the path written."""
+    """Save forex signal as JSON; returns the path written.
+
+    If a file for today already exists (e.g. --force re-run), it is NOT
+    overwritten — the original open date is preserved for review_date math.
+    """
     import numpy as np
 
     SIGNAL_DIR.mkdir(parents=True, exist_ok=True)
     path = _signal_path(sig.date)
+    if path.exists():
+        return path   # keep original; don't shift the review date
     payload = {
         "date": sig.date.isoformat(),
         "feature_date": sig.feature_date.isoformat(),
