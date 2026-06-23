@@ -23,7 +23,7 @@ class RunConfig:
     pred_avg_window: int = 1     # 1 = no averaging
 
     def pipeline_kwargs(self) -> dict:
-        """Return kwargs for run_ranking_pipeline()."""
+        """Return kwargs for run_ranking_pipeline() (commodity pipeline)."""
         return dict(
             horizon=self.horizon,
             use_cot=self.use_cot,
@@ -32,6 +32,32 @@ class RunConfig:
             vol_lookback=self.vol_lookback,
             force_refresh=self.force_refresh,
             embargo=self.horizon,  # must equal horizon to prevent label leakage
+        )
+
+    def forex_kwargs(self) -> dict:
+        """Return kwargs for run_forex_pipeline()."""
+        return dict(
+            horizon=self.horizon,
+            force_refresh=self.force_refresh,
+            vol_target=self.vol_target,
+            max_leverage=self.max_leverage,
+            vol_lookback=self.vol_lookback,
+            embargo=self.horizon,
+            model_names=self.models,
+            pred_avg_window=self.pred_avg_window,
+        )
+
+    def sectors_kwargs(self) -> dict:
+        """Return kwargs for run_sectors_pipeline()."""
+        return dict(
+            horizon=self.horizon,
+            force_refresh=self.force_refresh,
+            vol_target=self.vol_target,
+            max_leverage=self.max_leverage,
+            vol_lookback=self.vol_lookback,
+            embargo=self.horizon,
+            model_names=self.models,
+            pred_avg_window=self.pred_avg_window,
         )
 
     def label(self) -> str:

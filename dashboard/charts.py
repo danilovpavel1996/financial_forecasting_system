@@ -113,6 +113,51 @@ def vol_scale_chart(results: dict, skip_flat: bool = True) -> go.Figure:
     return fig if has_data else None
 
 
+def position_history_heatmap(results: dict, model_name: str | None = None) -> go.Figure | None:
+    """Heatmap of positions (+1 long, -1 short, 0 flat) over time."""
+    if model_name is None:
+        finite = {n: r for n, r in results.items() if np.isfinite(r.ls_sharpe)}
+        if not finite:
+            return None
+        model_name = max(finite, key=lambda n: finite[n].ls_sharpe)
+
+    r = results.get(model_name)
+    if r is None or r.pos_df is None or r.pos_df.empty:
+        return None
+
+    pos = r.pos_df.copy()
+    pos = pos.clip(-1, 1).round(0).astype(int)
+    tickers = sorted(pos.columns.tolist())
+    pos = pos[tickers]
+
+    colorscale = [
+        [0.0, "#E76F51"],   # -1 SHORT (red)
+        [0.5, "#D3D3D3"],   #  0 FLAT  (gray)
+        [1.0, "#2A9D8F"],   # +1 LONG  (green)
+    ]
+
+    fig = go.Figure(go.Heatmap(
+        z=pos.values.T,
+        x=pos.index,
+        y=tickers,
+        colorscale=colorscale,
+        zmin=-1, zmax=1,
+        colorbar=dict(
+            title="Pos",
+            tickvals=[-1, 0, 1],
+            ticktext=["SHORT", "FLAT", "LONG"],
+        ),
+        hovertemplate="%{x|%Y-%m-%d}<br>%{y}<br>pos=%{z}<extra></extra>",
+    ))
+    layout = {**_LAYOUT}
+    layout["title"] = f"Position History — {model_name}"
+    layout["yaxis_title"] = ""
+    layout["xaxis_title"] = ""
+    layout["height"] = max(350, len(tickers) * 28 + 100)
+    fig.update_layout(**layout)
+    return fig
+
+
 # ── Price / returns charts ────────────────────────────────────────────────────
 
 def price_chart(prices: dict, ticker: str, log_scale: bool = True) -> go.Figure:

@@ -22,10 +22,13 @@ from src.config import load_config
 from src.data import universe
 from src.eval.rank_backtester import ranking_comparison_table
 from src.pipeline_ranking import run_ranking_pipeline
+from src.pipeline_ranking_forex import run_forex_pipeline
+from src.pipeline_ranking_sectors import run_sectors_pipeline
 
 from dashboard.charts import (
     build_verdict,
     equity_curve,
+    position_history_heatmap,
     rolling_ric_chart,
     style_comparison_table,
     vol_scale_chart,
@@ -148,13 +151,6 @@ if "run_cfg" not in st.session_state:
 if run_btn:
     if not selected_models:
         st.error("Select at least one model.")
-    elif universe_choice != "Commodities":
-        st.warning(
-            f"**{universe_choice}** universe is supported on the Live Signal page. "
-            "The Run Experiment backtester currently runs on Commodities. "
-            "Forex and Equity Sector backtests can be run from the command line via "
-            "`python scripts/run_backtest.py`. Showing commodity results."
-        )
     else:
         run_cfg = RunConfig(
             horizon=horizon,
@@ -169,9 +165,13 @@ if run_btn:
         )
         with st.spinner("Running backtest… this takes ~30–60 s"):
             try:
-                results = run_ranking_pipeline(cfg, **run_cfg.pipeline_kwargs())
-                # Filter to selected models only
-                results = {k: v for k, v in results.items() if k in selected_models}
+                if universe_choice == "Forex":
+                    results = run_forex_pipeline(cfg, **run_cfg.forex_kwargs())
+                elif universe_choice == "Equity Sectors":
+                    results = run_sectors_pipeline(cfg, **run_cfg.sectors_kwargs())
+                else:
+                    results = run_ranking_pipeline(cfg, **run_cfg.pipeline_kwargs())
+                    results = {k: v for k, v in results.items() if k in selected_models}
                 st.session_state.results = results
                 st.session_state.run_cfg = run_cfg
                 st.success("Done!")
@@ -190,7 +190,7 @@ if st.session_state.results is None:
     _meta = UNIVERSE_META.get(universe_choice, {})
     st.markdown(f"""
 **Quick guide:**
-- *Universe*: select the asset basket to backtest. Currently only Commodities runs via this page.
+- *Universe*: select the asset basket to backtest (Commodities, Forex, Equity Sectors).
 - *Horizon*: how many trading days forward the model predicts returns for.
 - *Prediction averaging*: average predictions over N days before ranking (B3 variant).
 - *Vol targeting*: scales position sizes so portfolio targets a constant annual volatility.
@@ -225,10 +225,24 @@ except Exception:
 verdict = build_verdict(results, run_cfg.horizon, run_cfg.vol_target)
 st.info(verdict)
 
+# Best-model summary for chart titles
+_finite = {n: r for n, r in results.items() if np.isfinite(r.ls_sharpe)}
+if _finite:
+    _best_n = max(_finite, key=lambda n: _finite[n].ls_sharpe)
+    _best = _finite[_best_n]
+    _eq_title = (
+        f"#### Equity curve — {_best_n}: "
+        f"Sharpe {_best.ls_sharpe:.2f}, "
+        f"Ann Ret {_best.ls_ann_return:.1%}, "
+        f"Max DD {_best.ls_max_dd:.1%}"
+    )
+else:
+    _eq_title = "#### Equity curve"
+
 # Charts
 col1, col2 = st.columns(2)
 with col1:
-    st.markdown("#### Equity curve")
+    st.markdown(_eq_title)
     fig_eq = equity_curve(results, horizon=horizon)
     st.plotly_chart(fig_eq, use_container_width=True)
 
@@ -243,6 +257,12 @@ if run_cfg.vol_target is not None:
     if fig_scale is not None:
         st.markdown("#### Position scale factor (vol targeting)")
         st.plotly_chart(fig_scale, use_container_width=True)
+
+# Position history heatmap
+fig_pos = position_history_heatmap(results)
+if fig_pos is not None:
+    st.markdown("#### Position history — which pairs were held over time")
+    st.plotly_chart(fig_pos, use_container_width=True)
 
 # Detailed per-model stats
 with st.expander("Detailed stats per model"):
