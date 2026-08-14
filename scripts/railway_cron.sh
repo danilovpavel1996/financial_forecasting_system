@@ -14,7 +14,8 @@
 # leaves the MetaApi terminal deployed for manual inspection, and the
 # executor itself sends a Telegram alert if TELEGRAM_* vars are set.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
 python scripts/rebalance.py
 python scripts/execute_mt5.py --live
@@ -40,3 +41,9 @@ else
   echo "WARNING: GITHUB_TOKEN not set — this week's signal and receipt will be"
   echo "lost when the container exits. Set it in Railway service variables."
 fi
+
+# Last: health checks. A non-zero exit here fails the cron run AFTER all the
+# real work is done, which pushes a Railway app notification telling the
+# human to act (demo account expiring, MetaApi balance low).
+cd "$ROOT"
+python scripts/preflight_check.py
