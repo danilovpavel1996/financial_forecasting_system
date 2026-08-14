@@ -168,10 +168,13 @@ async def run(args: argparse.Namespace) -> None:
 
     rp = receipt_path(signal["date"])
     if rp.exists() and not args.force:
-        sys.exit(
-            f"⚠️  Already executed signal {signal['date']} "
-            f"(receipt: {rp.relative_to(ROOT)}). Use --force to override."
+        # Normal idempotent skip (e.g. cron re-run same day) — exit 0 so the
+        # cron pipeline continues; --force overrides.
+        print(
+            f"  Already executed signal {signal['date']} "
+            f"(receipt: {rp.relative_to(ROOT)}). Nothing to do."
         )
+        return
 
     token      = os.environ.get("METAAPI_TOKEN")
     account_id = os.environ.get("METAAPI_ACCOUNT_ID")
