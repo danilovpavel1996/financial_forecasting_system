@@ -4,6 +4,7 @@
 # Data (large, reproducible from APIs)
 data/raw/
 data/processed/
+data/live/*/
 
 # Serialized models
 outputs/models/

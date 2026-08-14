@@ -213,6 +213,7 @@ async def run(args: argparse.Namespace) -> None:
             f"MT5 dry run {signal['date']}: would close {closes or 'nothing'}, "
             f"open {[f'{side} {s}' for s, side in opens] or 'nothing'}."
         )
+        await _maybe_undeploy(account, args)
         return
 
     pos_by_symbol = {p["symbol"]: p for p in positions}
@@ -257,6 +258,16 @@ async def run(args: argparse.Namespace) -> None:
         print(f"\n⚠️  {msg}")
     notify(msg)
     print(f"  Receipt → {rp.relative_to(ROOT)}")
+    # On success only — after a partial failure we keep the terminal deployed
+    # so a human can inspect/fix via API without waiting for a redeploy.
+    await _maybe_undeploy(account, args)
+
+
+async def _maybe_undeploy(account, args) -> None:
+    if args.undeploy:
+        print("  Undeploying MetaApi terminal (stops hourly billing; "
+              "positions stay open at the broker)…")
+        await account.undeploy()
 
 
 def _write_receipt(path: Path, signal: dict, actual_before: dict,
@@ -283,6 +294,9 @@ def main() -> None:
                         help="re-run even if a receipt exists for this signal date")
     parser.add_argument("--allow-stale", action="store_true",
                         help="execute a signal not generated today")
+    parser.add_argument("--undeploy", action="store_true",
+                        help="undeploy the MetaApi cloud terminal after a "
+                             "successful run (saves hourly billing)")
     args = parser.parse_args()
     asyncio.run(run(args))
 

@@ -33,7 +33,10 @@ ROOT       = Path(__file__).resolve().parent.parent
 SIGNAL_DIR = ROOT / "outputs" / "signals"
 LIVE_DIR   = ROOT / "data" / "live"
 REPORT_DIR = ROOT / "outputs" / "reports"
-MT5_CSV    = LIVE_DIR / "mt5_history_2026-08-14.csv"
+# Trade history: hand-transcribed CSV for the first (expired) demo account,
+# plus the MetaApi-fetched CSV for the current one (see fetch_mt5_history.py).
+MT5_CSVS   = [LIVE_DIR / "mt5_history_2026-08-14.csv",
+              LIVE_DIR / "mt5_history_metaapi.csv"]
 
 HORIZON       = 5
 COST_BPS      = 3.0          # per side, same as backtest
@@ -63,9 +66,12 @@ def load_prices() -> dict[str, pd.Series]:
 
 def load_mt5_trades() -> list[dict]:
     rows = []
-    with open(MT5_CSV) as f:
-        for row in csv.DictReader(l for l in f if not l.startswith("#")):
-            rows.append({
+    for path in MT5_CSVS:
+        if not path.exists():
+            continue
+        with open(path) as f:
+            for row in csv.DictReader(l for l in f if not l.startswith("#")):
+                rows.append({
                 "open_time":  pd.Timestamp(row["open_time"]),
                 "symbol":     row["symbol"].upper(),
                 "side":       row["side"],
