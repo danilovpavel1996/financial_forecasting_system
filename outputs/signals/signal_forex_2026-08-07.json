@@ -1,0 +1,114 @@
+{
+  "date": "2026-08-07",
+  "feature_date": "2026-08-07",
+  "horizon": 5,
+  "model_name": "LightGBM",
+  "model_trained_on": "2026-07-30",
+  "rankings": [
+    {
+      "ticker": "USDJPY=X",
+      "mt5": "USDJPY",
+      "position": "LONG",
+      "predicted_return": 0.001615,
+      "rank": 1
+    },
+    {
+      "ticker": "CADJPY=X",
+      "mt5": "CADJPY",
+      "position": "LONG",
+      "predicted_return": 0.001435,
+      "rank": 2
+    },
+    {
+      "ticker": "EURUSD=X",
+      "mt5": "EURUSD",
+      "position": "LONG",
+      "predicted_return": 0.001074,
+      "rank": 3
+    },
+    {
+      "ticker": "NZDUSD=X",
+      "mt5": "NZDUSD",
+      "position": "FLAT",
+      "predicted_return": 0.000984,
+      "rank": 4
+    },
+    {
+      "ticker": "AUDJPY=X",
+      "mt5": "AUDJPY",
+      "position": "FLAT",
+      "predicted_return": 0.000839,
+      "rank": 5
+    },
+    {
+      "ticker": "EURJPY=X",
+      "mt5": "EURJPY",
+      "position": "FLAT",
+      "predicted_return": 0.000803,
+      "rank": 6
+    },
+    {
+      "ticker": "GBPUSD=X",
+      "mt5": "GBPUSD",
+      "position": "FLAT",
+      "predicted_return": 0.000719,
+      "rank": 7
+    },
+    {
+      "ticker": "GBPJPY=X",
+      "mt5": "GBPJPY",
+      "position": "FLAT",
+      "predicted_return": 0.000667,
+      "rank": 8
+    },
+    {
+      "ticker": "AUDUSD=X",
+      "mt5": "AUDUSD",
+      "position": "FLAT",
+      "predicted_return": 0.000586,
+      "rank": 9
+    },
+    {
+      "ticker": "EURAUD=X",
+      "mt5": "EURAUD",
+      "position": "FLAT",
+      "predicted_return": 0.000562,
+      "rank": 10
+    },
+    {
+      "ticker": "AUDNZD=X",
+      "mt5": "AUDNZD",
+      "position": "FLAT",
+      "predicted_return": 0.000555,
+      "rank": 11
+    },
+    {
+      "ticker": "EURGBP=X",
+      "mt5": "EURGBP",
+      "position": "FLAT",
+      "predicted_return": 0.000381,
+      "rank": 12
+    },
+    {
+      "ticker": "GBPAUD=X",
+      "mt5": "GBPAUD",
+      "position": "SHORT",
+      "predicted_return": 0.000368,
+      "rank": 13
+    },
+    {
+      "ticker": "USDCAD=X",
+      "mt5": "USDCAD",
+      "position": "SHORT",
+      "predicted_return": -8.5e-05,
+      "rank": 14
+    },
+    {
+      "ticker": "USDCHF=X",
+      "mt5": "USDCHF",
+      "position": "SHORT",
+      "predicted_return": -0.001508,
+      "rank": 15
+    }
+  ]
+}
