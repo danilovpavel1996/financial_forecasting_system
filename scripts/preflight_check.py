@@ -72,13 +72,35 @@ def check_metaapi_balance() -> list[str]:
     return []
 
 
+def check_artifact_push() -> list[str]:
+    """A run that trades but loses its records is a silent failure — page it.
+
+    Only meaningful on Railway (ephemeral container); skipped locally, where
+    artifacts are simply written to the working tree.
+    """
+    if not os.environ.get("RAILWAY_ENVIRONMENT_NAME"):
+        print("  Artifact push check skipped (not running on Railway).")
+        return []
+    if not os.environ.get("GITHUB_TOKEN"):
+        return ["GITHUB_TOKEN is not set — this week's signal JSON, execution "
+                "receipt and trade history were LOST when the container "
+                "exited. Trading itself was unaffected, but the evaluation "
+                "record has a hole in it. Fix: create a fine-grained GitHub "
+                "PAT (contents: read and write on "
+                "danilovpavel1996/financial_forecasting_system) and add it as "
+                "GITHUB_TOKEN in Railway → service → Variables."]
+    print("  Artifact push OK: GITHUB_TOKEN is set.")
+    return []
+
+
 def main() -> None:
     from dotenv import load_dotenv
     load_dotenv()
 
     print("\nPreflight checks")
     print("────────────────")
-    warnings = check_demo_expiry() + check_metaapi_balance()
+    warnings = (check_demo_expiry() + check_metaapi_balance()
+                + check_artifact_push())
     if warnings:
         print("\n⚠️  ACTION NEEDED — failing this run so Railway notifies you:")
         for w in warnings:

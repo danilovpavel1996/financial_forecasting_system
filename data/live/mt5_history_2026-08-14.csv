@@ -39,11 +39,11 @@ open_time,symbol,side,volume,open_price,close_time,close_price,profit,note
 2026-07-30 23:46:52,cadjpy,buy,0.01,113.920,2026-08-14 15:10:48,114.556,4.00,
 2026-07-30 23:47:12,euraud,buy,0.01,1.63995,2026-08-07 23:36:08,,2.80,close_price_unreadable;signal_said_SHORT
 2026-07-30 23:47:25,gbpaud,sell,0.01,1.91564,2026-08-14 15:20:58,1.91166,2.82,
-2026-07-30 23:47:40,usdjpy,buy,0.01,,,,,still_open;open_time_estimated
+2026-07-30 23:47:40,usdjpy,buy,0.01,,2026-08-14 16:44:00,,,account_expired;position_vanished;open_time_estimated
 2026-08-07 23:36:19,eurusd,sell,0.01,1.15568,2026-08-07 23:36:27,1.15580,-0.12,fumble
 2026-08-07 23:36:30,eurusd,buy,0.01,1.15580,2026-08-14 15:20:52,1.15681,1.01,
-2026-08-07 23:36:45,usdchf,sell,0.01,,,,,still_open;open_time_estimated
-2026-08-14 15:21:30,audjpy,buy,0.01,,,,,still_open;opened_today_estimated
-2026-08-14 15:21:30,eurjpy,buy,0.01,,,,,still_open;opened_today_estimated
-2026-08-14 15:21:30,eurusd,sell,0.01,,,,,still_open;opened_today_estimated
-2026-08-14 15:21:30,gbpusd,sell,0.01,,,,,still_open;opened_today_estimated
+2026-08-07 23:36:45,usdchf,sell,0.01,,2026-08-14 16:44:00,,,account_expired;position_vanished;open_time_estimated
+2026-08-14 15:21:30,audjpy,buy,0.01,,2026-08-14 16:44:00,,,account_expired;position_vanished;opened_today_estimated
+2026-08-14 15:21:30,eurjpy,buy,0.01,,2026-08-14 16:44:00,,,account_expired;position_vanished;opened_today_estimated
+2026-08-14 15:21:30,eurusd,sell,0.01,,2026-08-14 16:44:00,,,account_expired;position_vanished;opened_today_estimated
+2026-08-14 15:21:30,gbpusd,sell,0.01,,2026-08-14 16:44:00,,,account_expired;position_vanished;opened_today_estimated

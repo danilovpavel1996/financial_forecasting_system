@@ -2,8 +2,12 @@
 # Regenerate with scripts/fetch_mt5_history.py — do not edit by hand.
 open_time,symbol,side,volume,open_price,close_time,close_price,profit,note
 2026-08-14 13:44:40,audjpy,buy,0.01,112.625,,,,still_open;swap=0.00;commission=-0.02
-2026-08-14 13:44:42,eurjpy,buy,0.01,183.949,,,,still_open;swap=0.00;commission=-0.02
-2026-08-14 13:44:42,eurusd,sell,0.01,1.15803,,,,still_open;swap=0.00;commission=-0.02
-2026-08-14 13:44:45,gbpusd,sell,0.01,1.35543,,,,still_open;swap=0.00;commission=-0.02
-2026-08-14 13:44:45,usdchf,sell,0.01,0.81098,,,,still_open;swap=0.00;commission=-0.02
+2026-08-14 13:44:42,eurjpy,buy,0.01,183.949,2026-08-21 15:02:53,185.542,10.02,swap=0.13;commission=-0.04
+2026-08-14 13:44:42,eurusd,sell,0.01,1.15803,2026-08-21 15:02:53,1.16747,-9.44,swap=0.20;commission=-0.04
+2026-08-14 13:44:45,gbpusd,sell,0.01,1.35543,2026-08-21 15:02:53,1.36279,-7.36,swap=-0.14;commission=-0.04
+2026-08-14 13:44:45,usdchf,sell,0.01,0.81098,2026-08-21 15:02:54,0.8011,12.33,swap=-1.05;commission=-0.04
 2026-08-14 13:44:46,usdjpy,buy,0.01,158.851,,,,still_open;swap=0.00;commission=-0.02
+2026-08-21 15:02:54,audnzd,sell,0.01,1.19976,,,,still_open;swap=0.00;commission=-0.02
+2026-08-21 15:02:56,cadjpy,buy,0.01,115.411,,,,still_open;swap=0.00;commission=-0.02
+2026-08-21 15:02:57,gbpaud,sell,0.01,1.90145,,,,still_open;swap=0.00;commission=-0.02
+2026-08-21 15:02:59,usdcad,sell,0.01,1.37721,,,,still_open;swap=0.00;commission=-0.02

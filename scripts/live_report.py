@@ -72,6 +72,11 @@ def load_mt5_trades() -> list[dict]:
         with open(path) as f:
             for row in csv.DictReader(l for l in f if not l.startswith("#")):
                 rows.append({
+                    # Which demo account this trade belongs to. Timestamps
+                    # cannot decide it (the transcribed file is broker-local,
+                    # MetaApi returns UTC), but the source file can.
+                    "account": ("372709" if "2026-08-14" in path.name
+                                else "438689"),
                 "open_time":  pd.Timestamp(row["open_time"]),
                 "symbol":     row["symbol"].upper(),
                 "side":       row["side"],
@@ -167,9 +172,14 @@ def main() -> None:
     closed  = [t for t in trades if t["profit"] is not None]
     fumbles = [t for t in closed if "fumble" in t["note"]]
     live_pnl    = sum(t["profit"] for t in closed)
+    old_pnl = sum(t["profit"] for t in closed if t["account"] == "372709")
+    new_pnl = sum(t["profit"] for t in closed if t["account"] == "438689")
+    n_open  = sum(1 for t in trades
+                  if t["close_time"] is None and t["account"] == "438689")
     fumble_pnl  = sum(t["profit"] for t in fumbles)
     paper_total = float(ic["paper_ret_net"].sum())
 
+    recon = [s["date"] for s in sigs if s.get("reconstructed")]
     mean_ric = float(ic["cs_ric"].mean())
     se_ric   = float(ic["cs_ric"].std(ddof=1) / math.sqrt(len(ic)))
     pos_wk   = int((ic["cs_ric"] > 0).sum())
@@ -199,9 +209,14 @@ def main() -> None:
         "",
         "## 3. PnL — live vs paper",
         "",
-        f"- Live closed-trade PnL: **{live_pnl:+.2f} USD** on {START_BALANCE:.0f} "
-        f"({live_pnl / START_BALANCE:+.2%}); MT5 reports −77.15 incl. swaps "
-        "(≈ −7.5 USD of swap not in the profit column).",
+        f"- Live closed-trade PnL across both demo accounts: "
+        f"**{live_pnl:+.2f} USD** on {START_BALANCE:.0f} "
+        f"({live_pnl / START_BALANCE:+.2%}).",
+        f"  - Expired account 372709 (Jun 2 – Aug 14): {old_pnl:+.2f} USD "
+        "from the profit column; its MT5 footer read −77.15 including swaps, "
+        "i.e. ≈ −7.5 USD of swap the backtest does not model.",
+        f"  - Current account 438689 (from Aug 14): {new_pnl:+.2f} USD closed, "
+        f"{n_open} positions still open.",
         f"- Of which manual-entry fumbles (opened and closed within minutes): "
         f"{fumble_pnl:+.2f} USD across {len(fumbles)} trades.",
         f"- Paper strategy (signal followed exactly, h=5 windows, 1/6 equal "
@@ -214,8 +229,17 @@ def main() -> None:
         "statistically uninformative (SE of annualized Sharpe ≈ ±2.2). It is "
         "deliberately not reported. The IC row count (15 pairs × weeks) is the "
         "only metric here with any power.",
-        "- MT5 history was transcribed from a screenshot; `profit` values are "
-        "as-displayed, three close prices were unreadable.",
+        "- MT5 history for the first (expired) demo account was transcribed "
+        "from a screenshot; `profit` values are as-displayed, three close "
+        "prices were unreadable. History for the current account comes from "
+        "the MetaApi API.",
+        "- The most recent week's IC is provisional: it is computed from the "
+        "price snapshot taken during the signal run, before that day's close "
+        "settles. Values shift slightly once the data finalizes (2026-08-07 "
+        "read +0.67 last week, +0.48 now).",
+        *([f"- Reconstructed signal weeks (predictions regenerated after the "
+           f"original file was lost, so their IC is approximate): "
+           f"{', '.join(recon)}."] if recon else []),
         "- Research tooling — not investment advice.",
     ]
     out = REPORT_DIR / f"live_report_{today}.md"
