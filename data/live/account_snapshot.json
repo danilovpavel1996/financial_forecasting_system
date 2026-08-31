@@ -1,18 +1,18 @@
 {
-  "fetched_at": "2026-08-31T16:38:38",
+  "fetched_at": "2026-08-31T20:05:58",
   "login": 438689,
   "balance": 2002.72,
-  "equity": 2019.24,
+  "equity": 2016.65,
   "margin": 61.78,
-  "floating_pnl": 16.41,
+  "floating_pnl": 13.8,
   "positions": [
     {
       "symbol": "AUDJPY",
       "side": "buy",
       "volume": 0.01,
       "openPrice": 112.625,
-      "currentPrice": 114.483,
-      "profit": 12.12,
+      "currentPrice": 114.438,
+      "profit": 11.84,
       "swap": 0.51
     },
     {
@@ -20,8 +20,8 @@
       "side": "sell",
       "volume": 0.01,
       "openPrice": 1.16184,
-      "currentPrice": 1.16003,
-      "profit": 1.82,
+      "currentPrice": 1.16152,
+      "profit": 0.34,
       "swap": 0.03
     },
     {
@@ -29,8 +29,8 @@
       "side": "buy",
       "volume": 0.01,
       "openPrice": 216.993,
-      "currentPrice": 216.476,
-      "profit": -3.2,
+      "currentPrice": 216.321,
+      "profit": -4.18,
       "swap": 0.05
     },
     {
@@ -38,8 +38,8 @@
       "side": "sell",
       "volume": 0.01,
       "openPrice": 1.35743,
-      "currentPrice": 1.35462,
-      "profit": 2.77,
+      "currentPrice": 1.35464,
+      "profit": 2.71,
       "swap": -0.02
     },
     {
@@ -47,8 +47,8 @@
       "side": "sell",
       "volume": 0.01,
       "openPrice": 0.59325,
-      "currentPrice": 0.5918,
-      "profit": 1.44,
+      "currentPrice": 0.59175,
+      "profit": 1.48,
       "swap": 0.01
     },
     {
@@ -56,8 +56,8 @@
       "side": "buy",
       "volume": 0.01,
       "openPrice": 0.80702,
-      "currentPrice": 0.80817,
-      "profit": 1.46,
+      "currentPrice": 0.80826,
+      "profit": 1.61,
       "swap": 0.06
     }
   ]

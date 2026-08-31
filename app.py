@@ -31,7 +31,6 @@ load_dotenv()
 from src.live.report import (  # noqa: E402
     BACKTEST_RIC,
     BACKTEST_SHARPE,
-    DEMO_EXPIRES_DEFAULT,
     PAIR_NAMES,
     START_BALANCE,
     build_report,
@@ -53,8 +52,16 @@ st.set_page_config(page_title="Live Forex Monitor", page_icon="📈",
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _report():
+def _report(_report_module_mtime: float):
+    # The mtime argument is part of the cache key, never used in the body:
+    # editing src/live/report.py invalidates the cache automatically. Without
+    # it, a long-running session keeps serving a report object built by older
+    # code, and any newly added field raises KeyError on the reloaded page.
     return build_report()
+
+
+def get_report():
+    return _report((ROOT / "src" / "live" / "report.py").stat().st_mtime)
 
 
 def _next_friday_utc() -> datetime.datetime:
@@ -72,7 +79,7 @@ def fmt_usd(v: float | None) -> str:
 
 # ── Header ────────────────────────────────────────────────────────────────────
 
-rep = _report()
+rep = get_report()
 s = rep.stats
 
 st.title("Live Forex Monitor")
@@ -240,9 +247,9 @@ if not ic.empty:
         f"{s['mean_ric']:+.3f} ± {se:.3f} (SE) versus {BACKTEST_RIC:+.3f} in "
         f"the backtest (which also showed Sharpe {BACKTEST_SHARPE:.2f})."
     )
-    if s["unscored_signals"]:
+    if s.get("unscored_signals"):
         st.caption(
-            f"Not yet scored: **{', '.join(s['unscored_signals'])}** — a week "
+            f"Not yet scored: **{', '.join(s.get('unscored_signals', []))}** — a week "
             f"needs 5 trading days of prices after its signal date, and local "
             f"prices currently reach {s.get('prices_through') or 'nowhere'}. "
             "Use *Refresh market data* if those days have already passed."
