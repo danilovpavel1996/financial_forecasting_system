@@ -1,325 +1,332 @@
-"""Run Experiment — main Streamlit page.
+"""Live Forex Monitor — the one page that shows how the weekly system is doing.
+
+Everything here is computed by ``src.live.report``, the same module that writes
+``outputs/reports/live_report_*.md``, so this dashboard and that report can
+never disagree.
+
+The weekly routine itself runs unattended on Railway (Fridays 15:00 UTC):
+rebalance -> execute on MT5 via MetaApi -> fetch history -> write report ->
+push artifacts to GitHub. This page just reads what it left behind, so run
+`git pull` before opening it.
 
 Usage:
-    streamlit run app.py
+    .venv/bin/streamlit run app.py
 """
 from __future__ import annotations
 
+import datetime
+import subprocess
 import sys
 from pathlib import Path
 
-# Ensure src/ is importable when running via `streamlit run`
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 from dotenv import load_dotenv
+
 load_dotenv()
 
-import numpy as np
-import pandas as pd
-import streamlit as st
-
-from src.config import load_config
-from src.data import universe
-from src.eval.rank_backtester import ranking_comparison_table
-from src.pipeline_ranking import run_ranking_pipeline
-from src.pipeline_ranking_forex import run_forex_pipeline
-from src.pipeline_ranking_sectors import run_sectors_pipeline
-
-from dashboard.charts import (
-    build_verdict,
-    equity_curve,
-    position_history_heatmap,
-    rolling_ric_chart,
-    style_comparison_table,
-    vol_scale_chart,
-)
-from dashboard.config_override import ALL_MODELS, DEFAULT_MODELS, UNIVERSE_META, RunConfig
-
-# ── Page config ───────────────────────────────────────────────────────────────
-
-st.set_page_config(
-    page_title="Research Dashboard — Run Experiment",
-    page_icon="📊",
-    layout="wide",
+from src.live.report import (  # noqa: E402
+    BACKTEST_RIC,
+    BACKTEST_SHARPE,
+    DEMO_EXPIRES_DEFAULT,
+    PAIR_NAMES,
+    START_BALANCE,
+    build_report,
+    demo_expiry,
 )
 
-# ── Load project config once ─────────────────────────────────────────────────
+ROOT = Path(__file__).resolve().parent
 
-@st.cache_data
-def _load_cfg():
-    return load_config()
+# Diverging pair (blue <-> red), validated for the light surface: CVD ΔE 23.8,
+# normal-vision ΔE 31.6, both >= 3:1 contrast. Sign is also encoded by whether
+# the bar sits above or below zero, so colour is never the only cue.
+POS_COLOR   = "#2a78d6"
+NEG_COLOR   = "#d03b3b"
+REF_COLOR   = "#52514e"
+GRID_COLOR  = "rgba(128,128,128,0.25)"
 
-cfg = _load_cfg()
-ranked = universe.ranked_tickers(cfg)
+st.set_page_config(page_title="Live Forex Monitor", page_icon="📈",
+                   layout="wide")
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _report():
+    return build_report()
+
+
+def _next_friday_utc() -> datetime.datetime:
+    """Next scheduled cron fire (Fridays 15:00 UTC)."""
+    now = datetime.datetime.utcnow()
+    ahead = (4 - now.weekday()) % 7          # Monday=0 ... Friday=4
+    nxt = (now + datetime.timedelta(days=ahead)).replace(
+        hour=15, minute=0, second=0, microsecond=0)
+    return nxt + datetime.timedelta(days=7) if nxt <= now else nxt
+
+
+def fmt_usd(v: float | None) -> str:
+    return "—" if v is None else f"{v:+,.2f}"
+
+
+# ── Header ────────────────────────────────────────────────────────────────────
+
+rep = _report()
+s = rep.stats
+
+st.title("Live Forex Monitor")
+st.caption(
+    "Weekly 15-pair forex ranking, traded automatically on a Fusion Markets "
+    "**demo** account. Research tooling — not investment advice."
+)
 
 with st.sidebar:
-    st.title("📊 Forecast Research")
-    st.caption("Daily return forecasting research system")
+    st.header("Data")
+    st.write(f"Signals: **{len(rep.signals)}**")
+    st.write(f"Latest: **{rep.latest_signal['date'] if rep.latest_signal else '—'}**")
+    st.write(f"Account snapshot: **{s.get('snapshot_at') or 'none yet'}**")
     st.divider()
-
-    st.subheader("Experiment settings")
-
-    universe_choice = st.radio(
-        "Universe",
-        list(UNIVERSE_META.keys()),
-        index=0,
-        help="Select the asset universe to run the backtest on.",
+    if st.button("↻ Refresh live account", width="stretch"):
+        with st.spinner("Deploying MetaApi terminal and fetching…"):
+            r = subprocess.run(
+                [sys.executable, "scripts/fetch_mt5_history.py", "--undeploy"],
+                cwd=ROOT, capture_output=True, text=True, timeout=600)
+        if r.returncode == 0:
+            st.cache_data.clear()
+            st.success("Updated.")
+            st.rerun()
+        else:
+            st.error("Fetch failed — see details below.")
+            st.code((r.stderr or r.stdout)[-1500:])
+    st.caption(
+        "Pulls balance, equity and floating P&L from MetaApi, then undeploys "
+        "the terminal again. Takes ~1 minute and costs a few cents of MetaApi "
+        "time. Otherwise these numbers come from the last Friday run."
     )
-    _uni_meta = UNIVERSE_META[universe_choice]
-    st.caption(_uni_meta["label"])
+    st.divider()
+    nxt = _next_friday_utc()
+    st.write(f"**Next run:** {nxt:%a %d %b, %H:%M} UTC")
+    exp = demo_expiry()
+    days_left = (exp - datetime.date.today()).days
+    if days_left <= 10:
+        st.warning(f"Demo account expires in {days_left} days ({exp}). "
+                   "Create a new one and update MetaApi + DEMO_EXPIRES.")
+    else:
+        st.write(f"**Demo expires:** {exp} ({days_left} days)")
 
-    horizon = st.select_slider(
-        "Horizon (trading days)",
-        options=[1, 5, 10, 21, 63],
-        value=5,
-        help="Forward return horizon for targets and evaluation.",
-    )
+# ── Headline numbers ──────────────────────────────────────────────────────────
 
-    st.subheader("Prediction averaging")
-    use_pred_avg = st.checkbox(
-        "Prediction averaging (B3 variant)",
-        value=False,
-        help=(
-            "Average predictions over the last N trading days before ranking. "
-            "Phase 17 showed +0.07 Sharpe on equity sectors (h=63). "
-            "Phase 18 showed +0.22 Sharpe on forex (h=5)."
-        ),
-    )
-    pred_avg_window = 21
-    if use_pred_avg:
-        pred_avg_window = st.slider(
-            "Prediction averaging window (days)",
-            min_value=3, max_value=63, value=21, step=1,
-        )
-        st.caption(f"Will average predictions over the last {pred_avg_window} days before ranking.")
+c1, c2, c3, c4, c5 = st.columns(5)
+equity = s.get("equity")
+c1.metric("Equity", f"{equity:,.2f}" if equity else "—",
+          delta=f"{equity - START_BALANCE:+,.2f} vs start" if equity else None)
+c2.metric("Closed P&L", fmt_usd(s["closed_pnl"]),
+          delta=f"{s['closed_pnl'] / START_BALANCE:+.2%}")
+c3.metric("Floating P&L", fmt_usd(s.get("floating_pnl")),
+          help="Unrealized P&L on the positions currently open.")
+c4.metric("Mean weekly IC", f"{s['mean_ric']:+.3f}",
+          delta=f"{s['mean_ric'] - BACKTEST_RIC:+.3f} vs backtest",
+          delta_color="normal",
+          help="Cross-sectional rank IC — the only metric with real "
+               "statistical power at this sample size.")
+c5.metric("Weeks of live data", f"{s['n_weeks']}",
+          help="Decision point is roughly 20 weeks.")
 
-    st.subheader("Vol targeting")
-    use_vt = st.checkbox("Enable vol targeting", value=False)
-    vol_target = None
-    if use_vt:
-        vol_target = st.slider(
-            "Target vol (annualised)",
-            min_value=0.05, max_value=0.20, value=0.10, step=0.01,
-            format="%.0f%%",
+# ── Verdict ───────────────────────────────────────────────────────────────────
+
+mean_ric, se = s["mean_ric"], s["se_ric"]
+if s["n_weeks"] < 20:
+    if mean_ric - 2 * se > 0:
+        st.success(
+            f"**Signal is beating zero.** Mean weekly IC {mean_ric:+.3f} "
+            f"(SE {se:.3f}) is more than two standard errors above zero over "
+            f"{s['n_weeks']} weeks."
         )
-        max_leverage = st.number_input(
-            "Max leverage", min_value=1.0, max_value=5.0, value=2.0, step=0.5,
-        )
-        vol_lookback = st.number_input(
-            "Lookback days", min_value=5, max_value=63, value=21, step=1,
+    elif mean_ric + 2 * se < 0:
+        st.error(
+            f"**Signal is significantly negative.** Mean weekly IC "
+            f"{mean_ric:+.3f} (SE {se:.3f}) over {s['n_weeks']} weeks — worth "
+            "investigating for a sign error or a broken feature."
         )
     else:
-        max_leverage = 2.0
-        vol_lookback = 21
-
-    st.subheader("Features")
-    use_cot = st.checkbox(
-        "COT features",
-        value=False,
-        help="Add CFTC Commitment of Traders features. Phase 9 showed neutral/negative impact at h=5.",
-    )
-    force_refresh = st.checkbox(
-        "Refresh features",
-        value=False,
-        help="Delete and rebuild cached feature matrices from raw data. Use after config or feature changes.",
-    )
-
-    st.subheader("Models")
-    selected_models = st.multiselect(
-        "Models to run",
-        options=ALL_MODELS,
-        default=DEFAULT_MODELS,
-        help="LambdaMART requires lightgbm ≥ 4.0 and 'lambdarank' objective.",
-    )
-
-    run_btn = st.button("▶  Run Backtest", type="primary", use_container_width=True)
-
-    st.divider()
-    st.caption("⚠️ Research tooling — not investment advice.")
-
-# ── Session state ─────────────────────────────────────────────────────────────
-
-if "results" not in st.session_state:
-    st.session_state.results = None
-if "run_cfg" not in st.session_state:
-    st.session_state.run_cfg = None
-
-# ── Run on button click ───────────────────────────────────────────────────────
-
-if run_btn:
-    if not selected_models:
-        st.error("Select at least one model.")
-    else:
-        run_cfg = RunConfig(
-            horizon=horizon,
-            use_cot=use_cot,
-            vol_target=vol_target,
-            max_leverage=max_leverage,
-            vol_lookback=int(vol_lookback),
-            models=selected_models,
-            force_refresh=force_refresh,
-            universe=universe_choice,
-            pred_avg_window=pred_avg_window if use_pred_avg else 1,
+        st.info(
+            f"**No edge demonstrated yet, and none ruled out.** Mean weekly IC "
+            f"is {mean_ric:+.3f} with a standard error of {se:.3f}, so it "
+            f"cannot be told apart from zero after {s['n_weeks']} weeks. The "
+            f"backtest predicted {BACKTEST_RIC:+.3f}. Keep collecting — about "
+            f"20 weeks is where this starts to mean something."
         )
-        with st.spinner("Running backtest… this takes ~30–60 s"):
-            try:
-                if universe_choice == "Forex":
-                    results = run_forex_pipeline(cfg, **run_cfg.forex_kwargs())
-                elif universe_choice == "Equity Sectors":
-                    results = run_sectors_pipeline(cfg, **run_cfg.sectors_kwargs())
-                else:
-                    results = run_ranking_pipeline(cfg, **run_cfg.pipeline_kwargs())
-                    results = {k: v for k, v in results.items() if k in selected_models}
-                st.session_state.results = results
-                st.session_state.run_cfg = run_cfg
-                st.success("Done!")
-            except Exception as exc:
-                st.error(f"Pipeline failed: {exc}")
-                st.session_state.results = None
 
-# ── Display results ───────────────────────────────────────────────────────────
+# ── Current positions ─────────────────────────────────────────────────────────
 
-st.title("Run Experiment")
-
-if st.session_state.results is None:
-    st.info(
-        "Configure parameters in the sidebar and click **▶ Run Backtest** to start."
-    )
-    _meta = UNIVERSE_META.get(universe_choice, {})
-    st.markdown(f"""
-**Quick guide:**
-- *Universe*: select the asset basket to backtest (Commodities, Forex, Equity Sectors).
-- *Horizon*: how many trading days forward the model predicts returns for.
-- *Prediction averaging*: average predictions over N days before ranking (B3 variant).
-- *Vol targeting*: scales position sizes so portfolio targets a constant annual volatility.
-- *COT features*: adds CFTC positioning data (commodities only, best at horizons > 5d).
-- *LambdaMART*: LightGBM with lambdarank objective (list-wise ranking loss).
-
-**Reference baselines:**
-{_meta.get('baseline_text', '')}
-""")
-    st.stop()
-
-results = st.session_state.results
-run_cfg: RunConfig = st.session_state.run_cfg
-
-# Header
-col_a, col_b = st.columns([3, 1])
-with col_a:
-    st.subheader(f"Results — horizon={run_cfg.horizon}, config: `{run_cfg.label()}`")
-with col_b:
-    save_btn = st.button("💾 Save run report")
-
-# Comparison table
-tbl = ranking_comparison_table(results)
-st.markdown("#### Comparison table")
-try:
-    styled = style_comparison_table(tbl)
-    st.dataframe(styled, use_container_width=True)
-except Exception:
-    st.dataframe(tbl, use_container_width=True)
-
-# Verdict
-verdict = build_verdict(results, run_cfg.horizon, run_cfg.vol_target)
-st.info(verdict)
-
-# Best-model summary for chart titles
-_finite = {n: r for n, r in results.items() if np.isfinite(r.ls_sharpe)}
-if _finite:
-    _best_n = max(_finite, key=lambda n: _finite[n].ls_sharpe)
-    _best = _finite[_best_n]
-    _eq_title = (
-        f"#### Equity curve — {_best_n}: "
-        f"Sharpe {_best.ls_sharpe:.2f}, "
-        f"Ann Ret {_best.ls_ann_return:.1%}, "
-        f"Max DD {_best.ls_max_dd:.1%}"
-    )
+st.subheader("Current positions")
+pos = rep.positions()
+if pos.empty:
+    st.write("No open book.")
 else:
-    _eq_title = "#### Equity curve"
+    st.dataframe(
+        pos, hide_index=True, width="stretch",
+        column_config={
+            "Predicted": st.column_config.NumberColumn(
+                "Predicted return", format="%.5f",
+                help="Model's forecast 5-day return for this pair."),
+            "Open price": st.column_config.NumberColumn(format="%.5f"),
+            "Floating P&L": st.column_config.NumberColumn(
+                format="%.2f", help="From the last account snapshot."),
+        })
+    sig = rep.latest_signal
+    st.caption(
+        f"Book from signal {sig['date']}"
+        + (" · reconstructed signal (see notes)" if sig.get("reconstructed") else "")
+        + ". Long the top 3 predicted returns, short the bottom 3, 0.01 lots each."
+    )
 
-# Charts
-col1, col2 = st.columns(2)
-with col1:
-    st.markdown(_eq_title)
-    fig_eq = equity_curve(results, horizon=horizon)
-    st.plotly_chart(fig_eq, use_container_width=True)
+# ── Signal quality ────────────────────────────────────────────────────────────
 
-with col2:
-    st.markdown("#### Rolling 63-day CS-RIC")
-    fig_ric = rolling_ric_chart(results, window=63)
-    st.plotly_chart(fig_ric, use_container_width=True)
+st.subheader("Signal quality — weekly cross-sectional rank IC")
 
-# Vol scale chart (only when vol targeting is on)
-if run_cfg.vol_target is not None:
-    fig_scale = vol_scale_chart(results)
-    if fig_scale is not None:
-        st.markdown("#### Position scale factor (vol targeting)")
-        st.plotly_chart(fig_scale, use_container_width=True)
+ic = rep.ic
+if not ic.empty:
+    colors = [POS_COLOR if v > 0 else NEG_COLOR for v in ic["cs_ric"]]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=ic["date"], y=ic["cs_ric"], marker_color=colors,
+        marker_line_width=0, width=0.62,
+        customdata=ic[["active_hit", "paper_ret_net"]],
+        hovertemplate=("<b>%{x}</b><br>Rank IC %{y:+.3f}"
+                       "<br>Correct directions %{customdata[0]}"
+                       "<br>Paper return %{customdata[1]:+.2%}<extra></extra>"),
+        name="Weekly IC",
+    ))
+    fig.add_hline(y=0, line_width=1.5, line_color=REF_COLOR)
+    fig.add_hline(y=s["mean_ric"], line_width=2, line_dash="dash",
+                  line_color=REF_COLOR,
+                  annotation_text=f"live mean {s['mean_ric']:+.3f}",
+                  annotation_position="bottom left")
+    fig.add_hline(y=BACKTEST_RIC, line_width=2, line_dash="dot",
+                  line_color=REF_COLOR,
+                  annotation_text=f"backtest {BACKTEST_RIC:+.3f}",
+                  annotation_position="top left")
+    fig.update_layout(
+        height=380, margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False, bargap=0.3,
+        yaxis=dict(title="Spearman rank IC", gridcolor=GRID_COLOR,
+                   zeroline=False),
+        xaxis=dict(title=None, gridcolor="rgba(0,0,0,0)", type="category"),
+        hoverlabel=dict(font_size=13),
+    )
+    st.plotly_chart(fig, width="stretch")
 
-# Position history heatmap
-fig_pos = position_history_heatmap(results)
-if fig_pos is not None:
-    st.markdown("#### Position history — which pairs were held over time")
-    st.plotly_chart(fig_pos, use_container_width=True)
+    st.caption(
+        f"Each bar is one week: the correlation between the model's predicted "
+        f"ranking and what the 15 pairs actually did over the following 5 "
+        f"trading days. Above zero means the ranking had information that "
+        f"week. **{s['pos_weeks']} of {s['n_weeks']} weeks positive**, mean "
+        f"{s['mean_ric']:+.3f} ± {se:.3f} (SE) versus {BACKTEST_RIC:+.3f} in "
+        f"the backtest (which also showed Sharpe {BACKTEST_SHARPE:.2f})."
+    )
 
-# Detailed per-model stats
-with st.expander("Detailed stats per model"):
-    for name, r in results.items():
-        if not np.isfinite(r.ls_sharpe):
-            continue
-        st.markdown(f"**{name}**")
-        cols = st.columns(5)
-        cols[0].metric("Sharpe", f"{r.ls_sharpe:.2f}")
-        cols[1].metric("CS-RIC", f"{r.mean_cs_ric:+.4f}")
-        cols[2].metric("Ann. return", f"{r.ls_ann_return:.1%}")
-        cols[3].metric("Max DD", f"{r.ls_max_dd:.1%}")
-        cols[4].metric("Turnover", f"{r.turnover:.3f}")
+    with st.expander("Week-by-week detail"):
+        st.dataframe(
+            ic.rename(columns={
+                "date": "Signal date", "cs_ric": "Rank IC",
+                "n_pairs": "Pairs", "active_hit": "Correct directions",
+                "hit_rate": "Hit rate", "paper_ret_net": "Paper return (net)",
+                "reconstructed": "Reconstructed",
+            }), hide_index=True, width="stretch",
+            column_config={
+                "Rank IC": st.column_config.NumberColumn(format="%.4f"),
+                "Hit rate": st.column_config.ProgressColumn(
+                    format="%.0f%%", min_value=0, max_value=1),
+                "Paper return (net)": st.column_config.NumberColumn(
+                    format="%.2f%%"),
+            })
 
-# Save report
-if save_btn:
-    try:
-        _save_run_report(results, run_cfg, cfg)
-        st.success(f"Report saved to outputs/reports/")
-    except Exception as exc:
-        st.error(f"Save failed: {exc}")
+# ── Execution fidelity ────────────────────────────────────────────────────────
 
+st.subheader("Execution fidelity")
+fid = rep.fidelity
+st.write(
+    f"**{s['n_clean_fidelity']} of {s['n_fidelity']}** weeks the account held "
+    "exactly what the signal asked for."
+)
+st.dataframe(
+    fid.drop(columns=["ok"]).rename(columns={
+        "date": "Signal date", "match": "Match", "missing": "Missing",
+        "extra": "Extra", "wrong_dir": "Wrong direction"}),
+    hide_index=True, width="stretch")
+st.caption(
+    "Compares the signal's target book against the positions actually open at "
+    "the end of each signal day. The early misses were manual-trading errors; "
+    "everything from 2026-08-14 onward is automated."
+)
 
-# ── Save helper ───────────────────────────────────────────────────────────────
+# ── P&L ───────────────────────────────────────────────────────────────────────
 
-def _save_run_report(results: dict, run_cfg: RunConfig, cfg) -> None:
-    """Write a markdown report for this run to outputs/reports/."""
-    from datetime import datetime
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    fname = f"run_{run_cfg.label()}_{ts}.md"
-    path = cfg.paths.outputs_reports / fname
+st.subheader("Profit & loss")
+left, right = st.columns(2)
+with left:
+    st.markdown(
+        f"""
+- **Closed trades, both demo accounts:** {s['closed_pnl']:+.2f} USD
+  on {START_BALANCE:,.0f} ({s['closed_pnl'] / START_BALANCE:+.2%})
+  - Expired account 372709 (Jun 2 – Aug 14): {s['old_pnl']:+.2f} USD
+  - Current account 438689 (from Aug 14): {s['new_pnl']:+.2f} USD,
+    {s['n_open']} positions open
+- **Floating P&L on open positions:** {fmt_usd(s.get('floating_pnl'))} USD
+- **Manual-entry fumbles** (opened and closed within minutes):
+  {s['fumble_pnl']:+.2f} USD across {s['n_fumbles']} trades
+"""
+    )
+with right:
+    st.markdown(
+        f"""
+- **Paper equivalent** — the signal followed perfectly, 1/6 equal weight,
+  3 bps per side: **{s['paper_total']:+.2%}** (sum of weekly net returns)
+- The gap between paper and live is execution: the June weeks where only
+  the long legs got placed, plus swap costs the backtest never charged
+  (≈ −7.5 USD over the first account's life)
+- No live Sharpe is shown on purpose: at {s['n_weeks']} weekly observations
+  its standard error is roughly ±2.2 annualized, so the number would be
+  noise presented as a result
+"""
+    )
 
-    tbl = ranking_comparison_table(results)
-    verdict = build_verdict(results, run_cfg.horizon, run_cfg.vol_target)
+# ── Trade history ─────────────────────────────────────────────────────────────
 
-    lines = [
-        f"# Backtest Run — {run_cfg.label()}",
-        f"",
-        f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  ",
-        f"**Horizon:** {run_cfg.horizon}  ",
-        f"**Vol target:** {run_cfg.vol_target}  ",
-        f"**COT features:** {run_cfg.use_cot}  ",
-        f"**Models:** {', '.join(run_cfg.models)}  ",
-        f"",
-        f"## Results",
-        f"",
-        f"```",
-        tbl.to_string(),
-        f"```",
-        f"",
-        f"## Verdict",
-        f"",
-        verdict,
-        f"",
-        f"---",
-        f"",
-        f"*Research tooling only — not investment advice.*",
-    ]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8")
+with st.expander(f"Trade history ({len(rep.trades)} trades)"):
+    tdf = pd.DataFrame([{
+        "Opened": t["open_time"], "Closed": t["close_time"],
+        "Pair": PAIR_NAMES.get(t["symbol"], t["symbol"]),
+        "Side": t["side"].upper(), "Profit": t["profit"],
+        "Account": t["account"], "Note": t["note"],
+    } for t in rep.trades])
+    st.dataframe(tdf.sort_values("Opened", ascending=False), hide_index=True,
+                 width="stretch",
+                 column_config={"Profit": st.column_config.NumberColumn(
+                     format="%.2f")})
+
+with st.expander("How to read this / honesty notes"):
+    st.markdown(
+        f"""
+- **Rank IC is the metric that matters here.** Each week contributes 15
+  cross-sectional data points (one per pair), where portfolio return
+  contributes a single noisy number. That is why IC, not P&L, decides
+  whether this model works.
+- **{s['n_weeks']} weeks is still a small sample.** The mean IC is
+  {s['mean_ric']:+.3f} with SE {se:.3f}; the interval comfortably contains
+  zero. Roughly 20 weeks is where the estimate starts to bite.
+- **The newest week's IC is provisional.** It uses the price snapshot taken
+  during the signal run, before that day's close settles, and shifts slightly
+  once the data finalizes.
+- **History provenance:** the first demo account's trades were transcribed
+  from a screenshot (profits as displayed, three close prices unreadable);
+  the current account's history comes from the MetaApi API.
+{"- **Reconstructed weeks** (original signal file lost, predictions regenerated later, so IC is approximate): " + ", ".join(s["reconstructed_weeks"]) if s["reconstructed_weeks"] else ""}
+- **Not investment advice.** This is a research harness running on a demo
+  account, and the point of it is to find out whether the edge is real —
+  not to act on it.
+"""
+    )

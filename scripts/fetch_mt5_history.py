@@ -20,11 +20,13 @@ import argparse
 import asyncio
 import csv
 import datetime
+import json
 import os
 from pathlib import Path
 
 ROOT     = Path(__file__).resolve().parent.parent
 OUT_CSV  = ROOT / "data" / "live" / "mt5_history_metaapi.csv"
+SNAPSHOT = ROOT / "data" / "live" / "account_snapshot.json"
 ACCOUNT_START = datetime.datetime(2026, 8, 14)   # DEMO_002 creation day
 
 
@@ -102,6 +104,32 @@ async def run(args: argparse.Namespace) -> None:
     res = await connection.get_deals_by_time_range(ACCOUNT_START, end)
     trades = deals_to_trades(res.get("deals", []))
     write_csv(trades)
+
+    # Snapshot balance/equity/floating P&L so the dashboard can show the real
+    # account total without deploying the terminal on every page load.
+    info = await connection.get_account_information()
+    positions = await connection.get_positions()
+    SNAPSHOT.write_text(json.dumps({
+        "fetched_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "login": info.get("login"),
+        "balance": info.get("balance"),
+        "equity": info.get("equity"),
+        "margin": info.get("margin"),
+        "floating_pnl": round(sum(p.get("profit", 0.0) for p in positions), 2),
+        "positions": [{
+            "symbol": p["symbol"],
+            "side": "buy" if p["type"] == "POSITION_TYPE_BUY" else "sell",
+            "volume": p.get("volume"),
+            "openPrice": p.get("openPrice"),
+            "currentPrice": p.get("currentPrice"),
+            "profit": p.get("profit"),
+            "swap": p.get("swap"),
+        } for p in positions],
+    }, indent=2), encoding="utf-8")
+    print(f"  Account: balance {info.get('balance'):.2f}, equity "
+          f"{info.get('equity'):.2f}, floating "
+          f"{sum(p.get('profit', 0.0) for p in positions):+.2f} USD")
+    print(f"  Snapshot → {SNAPSHOT.relative_to(ROOT)}")
 
     closed = [t for t in trades if t["profit"] != ""]
     total  = sum(t["profit"] for t in closed)

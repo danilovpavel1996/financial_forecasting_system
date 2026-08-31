@@ -2,8 +2,7 @@
 
 Entry point: run_forex_pipeline(cfg, horizon) → dict[name → RankingResult]
 
-Mirrors pipeline_ranking_sectors.py but operates on the forex universe
-configured under forex in config.yaml.
+Operates on the forex universe configured under forex in config.yaml.
 
 No COT (not configured for forex).
 No carry_proxy (no ETF pairs for forex).

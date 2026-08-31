@@ -20,19 +20,24 @@ cd "$ROOT"
 python scripts/rebalance.py
 python scripts/execute_mt5.py --live
 python scripts/fetch_mt5_history.py --undeploy
+python scripts/live_report.py
 
 if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   repo="github.com/danilovpavel1996/financial_forecasting_system.git"
   tmp=$(mktemp -d)
   git clone --depth 1 "https://x-access-token:${GITHUB_TOKEN}@${repo}" "$tmp"
-  mkdir -p "$tmp/outputs/signals" "$tmp/outputs/executions" "$tmp/data/live"
+  mkdir -p "$tmp/outputs/signals" "$tmp/outputs/executions" \
+           "$tmp/outputs/reports" "$tmp/data/live"
   cp outputs/signals/signal_forex_*.json "$tmp/outputs/signals/"
   cp outputs/executions/execution_*.json "$tmp/outputs/executions/" 2>/dev/null || true
+  cp outputs/reports/live_report_*.md "$tmp/outputs/reports/" 2>/dev/null || true
   cp data/live/mt5_history_metaapi.csv "$tmp/data/live/" 2>/dev/null || true
+  cp data/live/account_snapshot.json "$tmp/data/live/" 2>/dev/null || true
   cd "$tmp"
   git config user.email "railway-bot@users.noreply.github.com"
   git config user.name "Railway weekly rebalance"
-  git add outputs/signals outputs/executions data/live/mt5_history_metaapi.csv
+  git add outputs/signals outputs/executions outputs/reports \
+          data/live/mt5_history_metaapi.csv data/live/account_snapshot.json
   if ! git diff --cached --quiet; then
     git commit -m "Weekly rebalance artifacts $(date -u +%F)"
     git push origin HEAD:main

@@ -1,0 +1,64 @@
+{
+  "fetched_at": "2026-08-31T16:29:03",
+  "login": 438689,
+  "balance": 2002.72,
+  "equity": 2018.86,
+  "margin": 61.78,
+  "floating_pnl": 16.01,
+  "positions": [
+    {
+      "symbol": "AUDJPY",
+      "side": "buy",
+      "volume": 0.01,
+      "openPrice": 112.625,
+      "currentPrice": 114.477,
+      "profit": 12.08,
+      "swap": 0.51
+    },
+    {
+      "symbol": "EURUSD",
+      "side": "sell",
+      "volume": 0.01,
+      "openPrice": 1.16184,
+      "currentPrice": 1.16004,
+      "profit": 1.81,
+      "swap": 0.03
+    },
+    {
+      "symbol": "GBPJPY",
+      "side": "buy",
+      "volume": 0.01,
+      "openPrice": 216.993,
+      "currentPrice": 216.471,
+      "profit": -3.24,
+      "swap": 0.05
+    },
+    {
+      "symbol": "GBPUSD",
+      "side": "sell",
+      "volume": 0.01,
+      "openPrice": 1.35743,
+      "currentPrice": 1.35476,
+      "profit": 2.63,
+      "swap": -0.02
+    },
+    {
+      "symbol": "NZDUSD",
+      "side": "sell",
+      "volume": 0.01,
+      "openPrice": 0.59325,
+      "currentPrice": 0.59189,
+      "profit": 1.35,
+      "swap": 0.01
+    },
+    {
+      "symbol": "USDCHF",
+      "side": "buy",
+      "volume": 0.01,
+      "openPrice": 0.80702,
+      "currentPrice": 0.8081,
+      "profit": 1.38,
+      "swap": 0.06
+    }
+  ]
+}

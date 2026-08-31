@@ -1,234 +1,87 @@
-"""Live-trading diagnostic report: signals vs realized returns vs MT5 execution.
+"""Write the live forex report as markdown.
 
-Answers three questions the tiny live sample CAN answer honestly:
-  1. Is the signal working?  Weekly cross-sectional rank IC (Spearman between
-     predicted 5d return and realized 5d forward log return, across all 15
-     pairs) — 15 data points per week, far higher-powered than portfolio PnL.
-  2. Did execution match the signal?  Reconstructs the MT5 position book at
-     the end of each signal day from the transcribed trade history and diffs
-     it against the signal's LONG/SHORT book.
-  3. Paper vs live PnL — what the signal alone would have earned (h=5,
-     equal-weight 1/6, net of cost_bps per side) vs the account's realized USD.
-
-It does NOT compute a live Sharpe: with ~10 weekly observations the standard
-error is so wide the number would be noise, and reporting it would violate
-the honest-reporting rule.
+All numbers come from ``src.live.report``, which the Streamlit dashboard
+(``app.py``) also uses — so the report and the dashboard can never disagree.
 
 Usage:
     .venv/bin/python scripts/live_report.py
 """
 from __future__ import annotations
 
-import csv
 import datetime
-import json
-import math
+import sys
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-from scipy.stats import spearmanr
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-ROOT       = Path(__file__).resolve().parent.parent
-SIGNAL_DIR = ROOT / "outputs" / "signals"
-LIVE_DIR   = ROOT / "data" / "live"
-REPORT_DIR = ROOT / "outputs" / "reports"
-# Trade history: hand-transcribed CSV for the first (expired) demo account,
-# plus the MetaApi-fetched CSV for the current one (see fetch_mt5_history.py).
-MT5_CSVS   = [LIVE_DIR / "mt5_history_2026-08-14.csv",
-              LIVE_DIR / "mt5_history_metaapi.csv"]
+from src.live.report import (  # noqa: E402
+    BACKTEST_RIC,
+    COST_BPS,
+    REPORT_DIR,
+    ROOT,
+    START_BALANCE,
+    build_report,
+)
 
-HORIZON       = 5
-COST_BPS      = 3.0          # per side, same as backtest
-BACKTEST_RIC  = 0.071        # phase-18 OOS cross-sectional rank IC (mean)
-START_BALANCE = 2000.0
-
-
-# ── Loaders ────────────────────────────────────────────────────────────────────
-
-def load_signals() -> list[dict]:
-    sigs = []
-    for p in sorted(SIGNAL_DIR.glob("signal_forex_*.json")):
-        sigs.append(json.loads(p.read_text()))
-    return sigs
-
-
-def load_prices() -> dict[str, pd.Series]:
-    """Close series per mt5 symbol from the most recent live cache dir."""
-    latest = sorted(d for d in LIVE_DIR.iterdir() if d.is_dir())[-1]
-    out: dict[str, pd.Series] = {}
-    for p in (latest / "prices").glob("*_eq_X_*.parquet"):
-        sym = p.name.split("_eq_X_")[0]          # e.g. EURUSD
-        df = pd.read_parquet(p)
-        out[sym] = df["Close"].dropna()
-    return out
-
-
-def load_mt5_trades() -> list[dict]:
-    rows = []
-    for path in MT5_CSVS:
-        if not path.exists():
-            continue
-        with open(path) as f:
-            for row in csv.DictReader(l for l in f if not l.startswith("#")):
-                rows.append({
-                    # Which demo account this trade belongs to. Timestamps
-                    # cannot decide it (the transcribed file is broker-local,
-                    # MetaApi returns UTC), but the source file can.
-                    "account": ("372709" if "2026-08-14" in path.name
-                                else "438689"),
-                "open_time":  pd.Timestamp(row["open_time"]),
-                "symbol":     row["symbol"].upper(),
-                "side":       row["side"],
-                "close_time": pd.Timestamp(row["close_time"]) if row["close_time"] else None,
-                "profit":     float(row["profit"]) if row["profit"] else None,
-                "note":       row["note"],
-            })
-    return rows
-
-
-# ── Realized returns ───────────────────────────────────────────────────────────
-
-def fwd_log_return(prices: pd.Series, asof: datetime.date, h: int) -> float | None:
-    """h-trading-day forward log return starting at the last close <= asof."""
-    idx = prices.index[prices.index <= pd.Timestamp(asof)]
-    if len(idx) == 0:
-        return None
-    i0 = prices.index.get_loc(idx[-1])
-    i1 = i0 + h
-    if i1 >= len(prices):
-        return None
-    return math.log(prices.iloc[i1] / prices.iloc[i0])
-
-
-# ── 1. Weekly cross-sectional rank IC ─────────────────────────────────────────
-
-def ic_table(sigs: list[dict], prices: dict[str, pd.Series]) -> pd.DataFrame:
-    rows = []
-    for s in sigs:
-        asof = datetime.date.fromisoformat(s["feature_date"])
-        pred, real, hits, n_act = [], [], 0, 0
-        for r in s["rankings"]:
-            fr = fwd_log_return(prices.get(r["mt5"], pd.Series(dtype=float)), asof, HORIZON)
-            if fr is None:
-                continue
-            pred.append(r["predicted_return"])
-            real.append(fr)
-            if r["position"] in ("LONG", "SHORT"):
-                n_act += 1
-                sign = 1.0 if r["position"] == "LONG" else -1.0
-                hits += int(sign * fr > 0)
-        if len(pred) < 10:      # week not realizable yet
-            continue
-        ric = spearmanr(pred, real).statistic
-        # paper portfolio: equal-weight 1/6 active book, h=5, cost both sides
-        act = [(r["mt5"], 1.0 if r["position"] == "LONG" else -1.0)
-               for r in s["rankings"] if r["position"] in ("LONG", "SHORT")]
-        pr = np.mean([sgn * fwd_log_return(prices[t], asof, HORIZON) for t, sgn in act])
-        pr_net = pr - 2 * COST_BPS / 1e4
-        rows.append({"date": s["date"], "cs_ric": ric, "n_pairs": len(pred),
-                     "active_hit": f"{hits}/{n_act}", "paper_ret_net": pr_net})
-    return pd.DataFrame(rows)
-
-
-# ── 2. Execution fidelity ─────────────────────────────────────────────────────
-
-def book_at(trades: list[dict], t: pd.Timestamp) -> dict[str, str]:
-    book = {}
-    for tr in trades:
-        if tr["open_time"] <= t and (tr["close_time"] is None or tr["close_time"] > t):
-            book[tr["symbol"]] = tr["side"]
-    return book
-
-
-def fidelity_table(sigs: list[dict], trades: list[dict]) -> pd.DataFrame:
-    rows = []
-    for s in sigs:
-        d = datetime.date.fromisoformat(s["date"])
-        target = {r["mt5"]: ("buy" if r["position"] == "LONG" else "sell")
-                  for r in s["rankings"] if r["position"] in ("LONG", "SHORT")}
-        actual = book_at(trades, pd.Timestamp(d) + pd.Timedelta(hours=23, minutes=59))
-        missing = sorted(t for t in target if t not in actual)
-        extra   = sorted(t for t in actual if t not in target)
-        wrong   = sorted(t for t in target if t in actual and target[t] != actual[t])
-        ok = not (missing or extra or wrong)
-        rows.append({"date": s["date"], "match": "✓" if ok else "✗",
-                     "missing": ",".join(missing) or "—",
-                     "extra": ",".join(extra) or "—",
-                     "wrong_dir": ",".join(wrong) or "—"})
-    return pd.DataFrame(rows)
-
-
-# ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    sigs   = load_signals()
-    prices = load_prices()
-    trades = load_mt5_trades()
-
-    ic  = ic_table(sigs, prices)
-    fid = fidelity_table(sigs, trades)
-
-    closed  = [t for t in trades if t["profit"] is not None]
-    fumbles = [t for t in closed if "fumble" in t["note"]]
-    live_pnl    = sum(t["profit"] for t in closed)
-    old_pnl = sum(t["profit"] for t in closed if t["account"] == "372709")
-    new_pnl = sum(t["profit"] for t in closed if t["account"] == "438689")
-    n_open  = sum(1 for t in trades
-                  if t["close_time"] is None and t["account"] == "438689")
-    fumble_pnl  = sum(t["profit"] for t in fumbles)
-    paper_total = float(ic["paper_ret_net"].sum())
-
-    recon = [s["date"] for s in sigs if s.get("reconstructed")]
-    mean_ric = float(ic["cs_ric"].mean())
-    se_ric   = float(ic["cs_ric"].std(ddof=1) / math.sqrt(len(ic)))
-    pos_wk   = int((ic["cs_ric"] > 0).sum())
+    rep = build_report()
+    s = rep.stats
+    ic = rep.ic.drop(columns=["hit_rate", "reconstructed"])
 
     today = datetime.date.today().isoformat()
     lines = [
         f"# Live forex report — {today}",
         "",
-        f"Window: {ic['date'].iloc[0]} → {ic['date'].iloc[-1]} "
-        f"({len(ic)} realizable signal weeks; the newest signal has no realized 5d return yet).",
+        f"Window: {s['window_from']} → {s['window_to']} ({s['n_weeks']} "
+        "realizable signal weeks; the newest signal has no realized 5d return "
+        "yet).",
         "",
         "## 1. Signal quality — weekly cross-sectional rank IC",
         "",
-        "Spearman(predicted, realized 5d fwd log return) across all 15 pairs, per week.",
+        "Spearman(predicted, realized 5d fwd log return) across all 15 pairs, "
+        "per week.",
         "",
         ic.to_markdown(index=False, floatfmt=".4f"),
         "",
-        f"- Mean CS-RIC: **{mean_ric:+.4f}** (SE ≈ {se_ric:.4f}), "
-        f"positive weeks: {pos_wk}/{len(ic)}",
+        f"- Mean CS-RIC: **{s['mean_ric']:+.4f}** (SE ≈ {s['se_ric']:.4f}), "
+        f"positive weeks: {s['pos_weeks']}/{s['n_weeks']}",
         f"- Backtest OOS CS-RIC for this model: **{BACKTEST_RIC:+.3f}** "
         "(no stored weekly backtest IC distribution exists, so this is a point "
         "comparison, not a percentile test).",
         "",
         "## 2. Execution fidelity — signal book vs MT5 book (end of signal day)",
         "",
-        fid.to_markdown(index=False),
+        rep.fidelity.drop(columns=["ok"]).to_markdown(index=False),
         "",
         "## 3. PnL — live vs paper",
         "",
         f"- Live closed-trade PnL across both demo accounts: "
-        f"**{live_pnl:+.2f} USD** on {START_BALANCE:.0f} "
-        f"({live_pnl / START_BALANCE:+.2%}).",
-        f"  - Expired account 372709 (Jun 2 – Aug 14): {old_pnl:+.2f} USD "
+        f"**{s['closed_pnl']:+.2f} USD** on {START_BALANCE:.0f} "
+        f"({s['closed_pnl'] / START_BALANCE:+.2%}).",
+        f"  - Expired account 372709 (Jun 2 – Aug 14): {s['old_pnl']:+.2f} USD "
         "from the profit column; its MT5 footer read −77.15 including swaps, "
         "i.e. ≈ −7.5 USD of swap the backtest does not model.",
-        f"  - Current account 438689 (from Aug 14): {new_pnl:+.2f} USD closed, "
-        f"{n_open} positions still open.",
+        f"  - Current account 438689 (from Aug 14): {s['new_pnl']:+.2f} USD "
+        f"closed, {s['n_open']} positions still open.",
+        *([f"  - Floating P&L on those open positions: "
+           f"{s['floating_pnl']:+.2f} USD; balance {s['balance']:.2f}, equity "
+           f"{s['equity']:.2f} (snapshot {s['snapshot_at']})."]
+          if s.get("floating_pnl") is not None else
+          ["  - No account snapshot on disk yet, so floating P&L on open "
+           "positions is not included."]),
         f"- Of which manual-entry fumbles (opened and closed within minutes): "
-        f"{fumble_pnl:+.2f} USD across {len(fumbles)} trades.",
+        f"{s['fumble_pnl']:+.2f} USD across {s['n_fumbles']} trades.",
         f"- Paper strategy (signal followed exactly, h=5 windows, 1/6 equal "
-        f"weight, {COST_BPS:.0f} bps/side): **{paper_total:+.2%}** cumulative "
-        "simple sum of weekly net returns.",
+        f"weight, {COST_BPS:.0f} bps/side): **{s['paper_total']:+.2%}** "
+        "cumulative simple sum of weekly net returns.",
         "",
         "## Honesty notes",
         "",
-        "- ~10 weekly observations: portfolio Sharpe/return over this window is "
-        "statistically uninformative (SE of annualized Sharpe ≈ ±2.2). It is "
-        "deliberately not reported. The IC row count (15 pairs × weeks) is the "
-        "only metric here with any power.",
+        f"- {s['n_weeks']} weekly observations: portfolio Sharpe/return over "
+        "this window is statistically uninformative (SE of annualized Sharpe "
+        "≈ ±2.2). It is deliberately not reported. The IC row count (15 pairs "
+        "× weeks) is the only metric here with any power.",
         "- MT5 history for the first (expired) demo account was transcribed "
         "from a screenshot; `profit` values are as-displayed, three close "
         "prices were unreadable. History for the current account comes from "
@@ -236,10 +89,11 @@ def main() -> None:
         "- The most recent week's IC is provisional: it is computed from the "
         "price snapshot taken during the signal run, before that day's close "
         "settles. Values shift slightly once the data finalizes (2026-08-07 "
-        "read +0.67 last week, +0.48 now).",
+        "read +0.67 one week, +0.48 the next).",
         *([f"- Reconstructed signal weeks (predictions regenerated after the "
            f"original file was lost, so their IC is approximate): "
-           f"{', '.join(recon)}."] if recon else []),
+           f"{', '.join(s['reconstructed_weeks'])}."]
+          if s["reconstructed_weeks"] else []),
         "- Research tooling — not investment advice.",
     ]
     out = REPORT_DIR / f"live_report_{today}.md"

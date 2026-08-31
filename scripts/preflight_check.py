@@ -24,8 +24,8 @@ import json
 import os
 import sys
 import urllib.request
+from pathlib import Path
 
-DEFAULT_DEMO_EXPIRES = "2026-09-13"   # DEMO_002 (login 438689), created 2026-08-14
 # Checked only weekly (Fridays), so the window must exceed one week or the
 # warning could arrive days before expiry instead of a full run ahead.
 WARN_DAYS            = 10
@@ -35,8 +35,11 @@ BILLING_URL = ("https://billing-api-v1.agiliumtrade.agiliumtrade.ai"
 
 
 def check_demo_expiry() -> list[str]:
-    expires = datetime.date.fromisoformat(
-        os.environ.get("DEMO_EXPIRES", DEFAULT_DEMO_EXPIRES))
+    # Same source of truth the dashboard reads.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from src.live.report import demo_expiry
+
+    expires = demo_expiry()
     days_left = (expires - datetime.date.today()).days
     if days_left < 0:
         return [f"Fusion demo EXPIRED {-days_left} day(s) ago ({expires}). "
