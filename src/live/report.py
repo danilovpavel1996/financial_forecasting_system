@@ -241,12 +241,47 @@ def fidelity_table(sigs: list[dict], trades: list[dict]) -> pd.DataFrame:
 
 # ── Assembled report ──────────────────────────────────────────────────────────
 
+def pnl_timeseries(trades: list[dict]) -> pd.DataFrame:
+    """Daily cumulative REALIZED P&L, total and per pair.
+
+    Profit is attributed to the day a trade closed, because that is when the
+    broker realized it — so the curve is a step function that only moves on
+    closing days. Open positions contribute nothing until they close; their
+    unrealized P&L is reported separately from the account snapshot.
+
+    Marking open positions to market daily would need per-pair contract sizes
+    and cross-rate conversion into USD, which is easy to get subtly wrong;
+    realized P&L comes straight from the broker and needs no modelling.
+
+    Returns a frame indexed by date with one column per symbol plus "TOTAL",
+    each a running cumulative sum in USD.
+    """
+    closed = [t for t in trades
+              if t["profit"] is not None and t["close_time"] is not None]
+    if not closed:
+        return pd.DataFrame()
+
+    df = pd.DataFrame([{"date": t["close_time"].normalize(),
+                        "symbol": t["symbol"],
+                        "profit": t["profit"]} for t in closed])
+    daily = (df.pivot_table(index="date", columns="symbol", values="profit",
+                            aggfunc="sum")
+               .sort_index())
+    # Reindex to every calendar day so the step curve reads continuously.
+    full = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
+    daily = daily.reindex(full).fillna(0.0)
+    cum = daily.cumsum()
+    cum["TOTAL"] = cum.sum(axis=1)
+    return cum
+
+
 @dataclass
 class LiveReport:
     signals: list[dict]
     trades: list[dict]
     ic: pd.DataFrame
     fidelity: pd.DataFrame
+    pnl: pd.DataFrame
     snapshot: dict | None
     stats: dict = field(default_factory=dict)
 
@@ -283,8 +318,9 @@ def build_report() -> LiveReport:
     trades   = load_mt5_trades()
     snapshot = load_account_snapshot()
 
-    ic  = ic_table(sigs, prices)
-    fid = fidelity_table(sigs, trades)
+    ic   = ic_table(sigs, prices)
+    fid  = fidelity_table(sigs, trades)
+    pnl  = pnl_timeseries(trades)
 
     # How far the price data reaches decides how many weeks can be scored:
     # a signal week needs HORIZON trading days of prices after its date.
@@ -327,4 +363,4 @@ def build_report() -> LiveReport:
     stats["snapshot_at"]  = (snapshot or {}).get("fetched_at")
 
     return LiveReport(signals=sigs, trades=trades, ic=ic, fidelity=fid,
-                      snapshot=snapshot, stats=stats)
+                      pnl=pnl, snapshot=snapshot, stats=stats)

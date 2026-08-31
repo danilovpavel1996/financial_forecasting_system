@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from plotly.subplots import make_subplots
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -44,8 +45,10 @@ ROOT = Path(__file__).resolve().parent
 # the bar sits above or below zero, so colour is never the only cue.
 POS_COLOR   = "#2a78d6"
 NEG_COLOR   = "#d03b3b"
-REF_COLOR   = "#52514e"
+REF_COLOR   = "#8a8a86"   # neutral: readable on both light and dark surfaces
 GRID_COLOR  = "rgba(128,128,128,0.25)"
+# Day the expired demo (372709) handed over to the current one (438689).
+HANDOVER    = "2026-08-14"
 
 st.set_page_config(page_title="Live Forex Monitor", page_icon="📈",
                    layout="wide")
@@ -270,6 +273,105 @@ if not ic.empty:
                 "Paper return (net)": st.column_config.NumberColumn(
                     format="%.2f%%"),
             })
+
+# ── Profit over time ──────────────────────────────────────────────────────────
+
+st.subheader("Profit over time")
+
+pnl = rep.pnl
+if pnl.empty:
+    st.write("No closed trades yet.")
+else:
+    grain = st.radio("Granularity", ["Daily", "Weekly"], horizontal=True,
+                     label_visibility="collapsed")
+    series = pnl if grain == "Daily" else pnl.resample("W-FRI").last().ffill()
+
+    total = go.Figure()
+    total.add_trace(go.Scatter(
+        x=series.index, y=series["TOTAL"], mode="lines",
+        line=dict(color=POS_COLOR, width=2, shape="hv"),
+        fill="tozeroy", fillcolor="rgba(42,120,214,0.12)",
+        hovertemplate="<b>%{x|%d %b %Y}</b><br>Cumulative %{y:+.2f} USD"
+                      "<extra></extra>",
+        name="Cumulative realized P&L",
+    ))
+    total.add_hline(y=0, line_width=1.5, line_color=REF_COLOR)
+    # The first demo account expired here and the book moved to 438689.
+    # Drawn as an explicit shape: add_vline's annotation positioning does
+    # arithmetic that raises TypeError on a datetime axis in this plotly build.
+    total.add_shape(type="line", x0=HANDOVER, x1=HANDOVER, xref="x",
+                    y0=0, y1=1, yref="paper",
+                    line=dict(color=REF_COLOR, width=1, dash="dot"))
+    total.add_annotation(x=HANDOVER, xref="x", y=1, yref="paper",
+                         text="new account", showarrow=False,
+                         xanchor="left", yanchor="bottom",
+                         font=dict(size=11, color=REF_COLOR))
+    total.update_layout(
+        height=320, margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        yaxis=dict(title="Cumulative realized P&L (USD)", gridcolor=GRID_COLOR,
+                   zeroline=False),
+        xaxis=dict(title=None, gridcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+    )
+    st.plotly_chart(total, width="stretch")
+    st.caption(
+        f"Realized profit only — each step is a trade closing, so the line "
+        f"moves only on closing days. Ends at "
+        f"**{series['TOTAL'].iloc[-1]:+,.2f} USD**. The "
+        f"{fmt_usd(s.get('floating_pnl'))} USD currently floating on open "
+        "positions is not included until those close, and the first demo "
+        "account's positions vanished when it expired on 14 Aug."
+    )
+
+    # Per pair: 15 series is far past what distinct hues can carry, so these
+    # are small multiples instead of a many-line chart. Shared y-axis, sorted
+    # worst to best, coloured by final sign (which the printed value repeats).
+    finals = pnl.drop(columns="TOTAL").iloc[-1].sort_values()
+    finals = finals[finals != 0]
+    ncols  = 4
+    nrows  = -(-len(finals) // ncols)
+    facets = make_subplots(
+        rows=nrows, cols=ncols, shared_yaxes=True,
+        subplot_titles=[f"{PAIR_NAMES.get(k, k)}  {v:+.1f}"
+                        for k, v in finals.items()],
+        vertical_spacing=0.12, horizontal_spacing=0.04)
+    for i, (sym, final) in enumerate(finals.items()):
+        col = POS_COLOR if final > 0 else NEG_COLOR
+        facets.add_trace(
+            go.Scatter(x=series.index, y=series[sym], mode="lines",
+                       line=dict(color=col, width=2, shape="hv"),
+                       hovertemplate=(f"<b>{sym}</b><br>%{{x|%d %b}}"
+                                      "<br>%{y:+.2f} USD<extra></extra>"),
+                       showlegend=False),
+            row=i // ncols + 1, col=i % ncols + 1)
+    facets.update_layout(
+        height=190 * nrows, margin=dict(l=10, r=10, t=30, b=10),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    facets.update_xaxes(showticklabels=False, gridcolor="rgba(0,0,0,0)")
+    # shared_yaxes only links panels within a row, which would leave each row
+    # on its own scale and make the panels look comparable while they are not.
+    # Pin one explicit range across all of them.
+    lo  = float(series[finals.index].min().min())
+    hi  = float(series[finals.index].max().max())
+    pad = 0.08 * (hi - lo)
+    facets.update_yaxes(range=[lo - pad, hi + pad], gridcolor=GRID_COLOR,
+                        zeroline=True, zerolinecolor=REF_COLOR,
+                        zerolinewidth=1)
+    for ann in facets.layout.annotations:
+        ann.font.size = 12
+        ann.font.color = REF_COLOR   # titles are text, never series colour
+    st.plotly_chart(facets, width="stretch")
+    st.caption(
+        f"Cumulative realized P&L per pair, same vertical scale throughout so "
+        f"the panels are comparable, ordered worst to best. "
+        f"{len(finals)} of 15 pairs have closed a trade. Biggest losers "
+        f"{', '.join(PAIR_NAMES.get(k, k) for k in finals.index[:2])}; biggest "
+        f"winners {', '.join(PAIR_NAMES.get(k, k) for k in finals.index[-2:])}. "
+        "With 1–5 closed trades per pair these differences are noise, not "
+        "evidence that the model is good or bad at particular pairs."
+    )
 
 # ── Execution fidelity ────────────────────────────────────────────────────────
 
