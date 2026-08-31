@@ -25,6 +25,13 @@ from src.live.report import (  # noqa: E402
 
 
 def main() -> None:
+    # In the weekly cron this runs right after rebalance.py, which has already
+    # fetched today's prices. Run it by hand in a fresh checkout and the newest
+    # weeks may be unscorable until prices are refreshed.
+    if "--refresh-prices" in sys.argv:
+        from src.live.report import refresh_prices
+        print(f"  Refreshing prices → data/live/{refresh_prices()}")
+
     rep = build_report()
     s = rep.stats
     ic = rep.ic.drop(columns=["hit_rate", "reconstructed"])

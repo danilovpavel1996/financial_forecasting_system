@@ -89,6 +89,33 @@ def load_prices() -> dict[str, pd.Series]:
     return out
 
 
+def refresh_prices() -> str:
+    """Download forex closes up to today into a fresh cache directory.
+
+    A signal week's IC can only be computed once its 5-day forward returns
+    have realized, which needs prices from AFTER the signal date. The weekly
+    cron has them (it fetches prices at the start of every run), but a local
+    checkout does not: ``data/live/<date>/`` is gitignored, so the newest
+    local prices are from whenever rebalance.py last ran here. Call this to
+    catch up. Returns the cache directory used.
+    """
+    from src.config import load_config
+    from src.data import universe
+    from src.data.prices import fetch_all_tickers
+
+    cfg   = load_config()
+    today = datetime.date.today()
+    cache = LIVE_DIR / today.strftime("%Y-%m-%d")
+    cache.mkdir(parents=True, exist_ok=True)
+    fetch_all_tickers(
+        universe.forex_price_tickers(cfg),
+        universe.forex_start_date(cfg),
+        (today + datetime.timedelta(days=1)).strftime("%Y-%m-%d"),
+        cache, force_refresh=True,
+    )
+    return cache.name
+
+
 def load_mt5_trades() -> list[dict]:
     """All trades across both demo accounts, oldest first."""
     rows = []
@@ -259,6 +286,11 @@ def build_report() -> LiveReport:
     ic  = ic_table(sigs, prices)
     fid = fidelity_table(sigs, trades)
 
+    # How far the price data reaches decides how many weeks can be scored:
+    # a signal week needs HORIZON trading days of prices after its date.
+    last_price = max((p.index[-1] for p in prices.values() if len(p)),
+                     default=None)
+
     closed  = [t for t in trades if t["profit"] is not None]
     fumbles = [t for t in closed if "fumble" in t["note"]]
     n_weeks = len(ic)
@@ -285,6 +317,10 @@ def build_report() -> LiveReport:
         "n_clean_fidelity": int(fid["ok"].sum()) if len(fid) else 0,
         "n_fidelity": len(fid),
     }
+    stats["prices_through"] = (last_price.date().isoformat()
+                               if last_price is not None else None)
+    stats["unscored_signals"] = [s["date"] for s in sigs
+                                 if s["date"] not in set(ic["date"])]
     stats["floating_pnl"] = (snapshot or {}).get("floating_pnl")
     stats["balance"]      = (snapshot or {}).get("balance")
     stats["equity"]       = (snapshot or {}).get("equity")

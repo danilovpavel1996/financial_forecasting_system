@@ -85,7 +85,20 @@ with st.sidebar:
     st.header("Data")
     st.write(f"Signals: **{len(rep.signals)}**")
     st.write(f"Latest: **{rep.latest_signal['date'] if rep.latest_signal else '—'}**")
+    st.write(f"Prices through: **{s.get('prices_through') or '—'}**")
     st.write(f"Account snapshot: **{s.get('snapshot_at') or 'none yet'}**")
+    st.divider()
+    if st.button("↻ Refresh market data", width="stretch"):
+        with st.spinner("Downloading forex closes…"):
+            from src.live.report import refresh_prices
+            refresh_prices()
+        st.cache_data.clear()
+        st.rerun()
+    st.caption(
+        "Scoring a signal week needs 5 trading days of prices AFTER it. The "
+        "weekly cron has them; a local checkout does not, because the price "
+        "cache is gitignored — so refresh here to score the most recent weeks."
+    )
     st.divider()
     if st.button("↻ Refresh live account", width="stretch"):
         with st.spinner("Deploying MetaApi terminal and fetching…"):
@@ -227,6 +240,13 @@ if not ic.empty:
         f"{s['mean_ric']:+.3f} ± {se:.3f} (SE) versus {BACKTEST_RIC:+.3f} in "
         f"the backtest (which also showed Sharpe {BACKTEST_SHARPE:.2f})."
     )
+    if s["unscored_signals"]:
+        st.caption(
+            f"Not yet scored: **{', '.join(s['unscored_signals'])}** — a week "
+            f"needs 5 trading days of prices after its signal date, and local "
+            f"prices currently reach {s.get('prices_through') or 'nowhere'}. "
+            "Use *Refresh market data* if those days have already passed."
+        )
 
     with st.expander("Week-by-week detail"):
         st.dataframe(
