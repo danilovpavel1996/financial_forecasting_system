@@ -1,7 +1,7 @@
 # MT5 history for demo login 438689 (DEMO_002), fetched from MetaApi.
 # Regenerate with scripts/fetch_mt5_history.py — do not edit by hand.
 open_time,symbol,side,volume,open_price,close_time,close_price,profit,note
-2026-08-14 13:44:40,audjpy,buy,0.01,112.625,,,,still_open;swap=0.00;commission=-0.02
+2026-08-14 13:44:40,audjpy,buy,0.01,112.625,2026-09-04 15:04:12,112.42,-1.31,swap=0.74;commission=-0.04
 2026-08-14 13:44:42,eurjpy,buy,0.01,183.949,2026-08-21 15:02:53,185.542,10.02,swap=0.13;commission=-0.04
 2026-08-14 13:44:42,eurusd,sell,0.01,1.15803,2026-08-21 15:02:53,1.16747,-9.44,swap=0.20;commission=-0.04
 2026-08-14 13:44:45,gbpusd,sell,0.01,1.35543,2026-08-21 15:02:53,1.36279,-7.36,swap=-0.14;commission=-0.04
@@ -16,3 +16,4 @@ open_time,symbol,side,volume,open_price,close_time,close_price,profit,note
 2026-08-28 15:01:59,gbpusd,sell,0.01,1.35743,,,,still_open;swap=0.00;commission=-0.02
 2026-08-28 15:02:00,nzdusd,sell,0.01,0.59325,,,,still_open;swap=0.00;commission=-0.02
 2026-08-28 15:02:02,usdchf,buy,0.01,0.80702,,,,still_open;swap=0.00;commission=-0.02
+2026-09-04 15:04:12,usdjpy,buy,0.01,156.067,,,,still_open;swap=0.00;commission=-0.02
