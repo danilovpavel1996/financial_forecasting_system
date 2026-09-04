@@ -4,7 +4,17 @@ __pycache__
 *.egg-info
 .pytest_cache
 .env
-data/live/*/
 f_year.txt
 notebooks
 .DS_Store
+
+# Dated price caches are large and re-fetched on every run, so keep them out
+# of the image. NOTE: Docker cleans a trailing slash off patterns, so
+# "data/live/*/" silently becomes "data/live/*" and also drops the loose files
+# in that folder — which is how the irreplaceable transcribed history of the
+# expired demo account went missing from the image and made the weekly report
+# understate P&L and show every early week as an execution failure.
+# Exclude everything there, then explicitly put the small files back.
+data/live/*
+!data/live/*.csv
+!data/live/*.json

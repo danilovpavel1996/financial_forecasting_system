@@ -85,6 +85,11 @@ def main() -> None:
         "",
         "## Honesty notes",
         "",
+        *([f"- ⚠️ **Trade history missing: {', '.join(s['missing_history'])}.** "
+           "Every number above that depends on it — realized P&L and the "
+           "execution-fidelity table — is WRONG for the affected period. Fix "
+           "the file before trusting this report."]
+          if s["missing_history"] else []),
         f"- {s['n_weeks']} weekly observations: portfolio Sharpe/return over "
         "this window is statistically uninformative (SE of annualized Sharpe "
         "≈ ±2.2). It is deliberately not reported. The IC row count (15 pairs "

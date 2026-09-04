@@ -138,6 +138,16 @@ with st.sidebar:
     else:
         st.write(f"**Demo expires:** {exp} ({days_left} days)")
 
+# ── Data integrity ────────────────────────────────────────────────────────────
+
+if s.get("missing_history"):
+    st.error(
+        f"**Trade history missing: {', '.join(s['missing_history'])}.** "
+        "Realized P&L and the execution-fidelity table below are wrong for the "
+        "affected period — they will understate profit and report positions as "
+        "never opened. Restore the file before trusting anything on this page."
+    )
+
 # ── Headline numbers ──────────────────────────────────────────────────────────
 
 c1, c2, c3, c4, c5 = st.columns(5)

@@ -96,6 +96,26 @@ def check_artifact_push() -> list[str]:
     return []
 
 
+def check_trade_history() -> list[str]:
+    """The report is only as good as the trade history behind it.
+
+    The transcribed history of the expired demo account cannot be re-fetched
+    from anywhere — if it is absent from the image, the weekly report silently
+    understates P&L and reports every affected week as an execution failure.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from src.live.report import MT5_CSVS
+
+    missing = [p.name for p in MT5_CSVS if not p.exists()]
+    if missing:
+        return [f"Trade history file(s) missing: {', '.join(missing)}. This "
+                "week's report understates realized P&L and shows the affected "
+                "weeks as execution failures. Check .dockerignore is not "
+                "excluding data/live/*.csv from the image."]
+    print("  Trade history OK: all history files present.")
+    return []
+
+
 def main() -> None:
     from dotenv import load_dotenv
     load_dotenv()
@@ -103,7 +123,7 @@ def main() -> None:
     print("\nPreflight checks")
     print("────────────────")
     warnings = (check_demo_expiry() + check_metaapi_balance()
-                + check_artifact_push())
+                + check_artifact_push() + check_trade_history())
     if warnings:
         print("\n⚠️  ACTION NEEDED — failing this run so Railway notifies you:")
         for w in warnings:

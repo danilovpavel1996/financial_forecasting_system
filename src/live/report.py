@@ -353,6 +353,11 @@ def build_report() -> LiveReport:
         "n_clean_fidelity": int(fid["ok"].sum()) if len(fid) else 0,
         "n_fidelity": len(fid),
     }
+    # A missing history file silently understates P&L and makes every affected
+    # week look like an execution failure, so surface it rather than absorb it.
+    # (This happened for real: .dockerignore's "data/live/*/" was cleaned to
+    # "data/live/*" and dropped the transcribed history from the image.)
+    stats["missing_history"] = [p.name for p in MT5_CSVS if not p.exists()]
     stats["prices_through"] = (last_price.date().isoformat()
                                if last_price is not None else None)
     stats["unscored_signals"] = [s["date"] for s in sigs
