@@ -31,13 +31,13 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   cp outputs/signals/signal_forex_*.json "$tmp/outputs/signals/"
   cp outputs/executions/execution_*.json "$tmp/outputs/executions/" 2>/dev/null || true
   cp outputs/reports/live_report_*.md "$tmp/outputs/reports/" 2>/dev/null || true
-  cp data/live/mt5_history_metaapi.csv "$tmp/data/live/" 2>/dev/null || true
+  cp data/live/mt5_history_*.csv "$tmp/data/live/" 2>/dev/null || true
   cp data/live/account_snapshot.json "$tmp/data/live/" 2>/dev/null || true
   cd "$tmp"
   git config user.email "railway-bot@users.noreply.github.com"
   git config user.name "Railway weekly rebalance"
   git add outputs/signals outputs/executions outputs/reports \
-          data/live/mt5_history_metaapi.csv data/live/account_snapshot.json
+          data/live/ 
   if ! git diff --cached --quiet; then
     git commit -m "Weekly rebalance artifacts $(date -u +%F)"
     git push origin HEAD:main

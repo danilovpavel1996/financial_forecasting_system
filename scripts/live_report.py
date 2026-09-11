@@ -63,14 +63,16 @@ def main() -> None:
         "",
         "## 3. PnL — live vs paper",
         "",
-        f"- Live closed-trade PnL across both demo accounts: "
+        f"- Live closed-trade PnL across all demo accounts: "
         f"**{s['closed_pnl']:+.2f} USD** on {START_BALANCE:.0f} "
         f"({s['closed_pnl'] / START_BALANCE:+.2%}).",
-        f"  - Expired account 372709 (Jun 2 – Aug 14): {s['old_pnl']:+.2f} USD "
-        "from the profit column; its MT5 footer read −77.15 including swaps, "
-        "i.e. ≈ −7.5 USD of swap the backtest does not model.",
-        f"  - Current account 438689 (from Aug 14): {s['new_pnl']:+.2f} USD "
-        f"closed, {s['n_open']} positions still open.",
+        *[f"  - {'Current' if a['active'] else 'Retired'} account {a['login']} "
+          f"(opened with {a['start_balance']:,.2f}, history {a['source']}): "
+          f"{a['closed_pnl']:+.2f} USD over {a['n_trades']} closed trades"
+          + (f", {a['n_open']} still open." if a["n_open"] else ".")
+          for a in s["per_account"]],
+        "  - Account 372709's MT5 footer read −77.15 including swaps, i.e. "
+        "≈ −7.5 USD of swap the backtest does not model.",
         *([f"  - Floating P&L on those open positions: "
            f"{s['floating_pnl']:+.2f} USD; balance {s['balance']:.2f}, equity "
            f"{s['equity']:.2f} (snapshot {s['snapshot_at']})."]

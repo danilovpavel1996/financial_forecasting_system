@@ -405,15 +405,18 @@ st.caption(
 # ── P&L ───────────────────────────────────────────────────────────────────────
 
 st.subheader("Profit & loss")
+account_lines = "\n".join(
+    f"  - {'Current' if a['active'] else 'Retired'} account {a['login']}: "
+    f"{a['closed_pnl']:+.2f} USD over {a['n_trades']} closed trades"
+    + (f", {a['n_open']} open" if a["n_open"] else "")
+    for a in s["per_account"])
 left, right = st.columns(2)
 with left:
     st.markdown(
         f"""
-- **Closed trades, both demo accounts:** {s['closed_pnl']:+.2f} USD
+- **Closed trades, all demo accounts:** {s['closed_pnl']:+.2f} USD
   on {START_BALANCE:,.0f} ({s['closed_pnl'] / START_BALANCE:+.2%})
-  - Expired account 372709 (Jun 2 – Aug 14): {s['old_pnl']:+.2f} USD
-  - Current account 438689 (from Aug 14): {s['new_pnl']:+.2f} USD,
-    {s['n_open']} positions open
+{account_lines}
 - **Floating P&L on open positions:** {fmt_usd(s.get('floating_pnl'))} USD
 - **Manual-entry fumbles** (opened and closed within minutes):
   {s['fumble_pnl']:+.2f} USD across {s['n_fumbles']} trades

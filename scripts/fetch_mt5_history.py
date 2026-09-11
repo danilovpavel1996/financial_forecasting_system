@@ -1,9 +1,10 @@
 """Fetch MT5 trade history from MetaApi into a CSV for live_report.py.
 
-Pulls all deals since the account's first day, pairs entry/exit deals by
-position id, and writes ``data/live/mt5_history_metaapi.csv`` in the same
-schema as the hand-transcribed history of the first (expired) demo account.
-Still-open positions get an empty close_time, matching that schema.
+Pulls all deals for the connected account, pairs entry/exit deals by position
+id, and writes ``data/live/mt5_history_<login>.csv``. Naming the file after the
+MT5 login means switching to a new demo account (Fusion demos expire after 30
+days) writes a new file rather than overwriting the retired account's record.
+Still-open positions get an empty close_time.
 
 The ``profit`` column is the raw MT5 profit; swap and commission are summed
 into the ``note`` column so the report can quantify carry drag separately.
@@ -25,9 +26,10 @@ import os
 from pathlib import Path
 
 ROOT     = Path(__file__).resolve().parent.parent
-OUT_CSV  = ROOT / "data" / "live" / "mt5_history_metaapi.csv"
 SNAPSHOT = ROOT / "data" / "live" / "account_snapshot.json"
-ACCOUNT_START = datetime.datetime(2026, 8, 14)   # DEMO_002 creation day
+# Wide enough to cover any demo account in the chain; deals before an account
+# existed simply do not come back.
+ACCOUNT_START = datetime.datetime(2026, 6, 1)
 
 
 def deals_to_trades(deals: list[dict]) -> list[dict]:
@@ -67,12 +69,14 @@ def deals_to_trades(deals: list[dict]) -> list[dict]:
     return trades
 
 
-def write_csv(trades: list[dict]) -> None:
+def write_csv(trades: list[dict], out_csv: Path, login: str) -> None:
+    """Write one account's history. Named by login so that switching to a new
+    demo account never overwrites a retired account's record."""
     cols = ["open_time", "symbol", "side", "volume", "open_price",
             "close_time", "close_price", "profit", "note"]
-    with open(OUT_CSV, "w", newline="") as f:
-        f.write("# MT5 history for demo login 438689 (DEMO_002), fetched from "
-                "MetaApi.\n# Regenerate with scripts/fetch_mt5_history.py — "
+    with open(out_csv, "w", newline="") as f:
+        f.write(f"# MT5 history for demo login {login}, fetched from MetaApi.\n"
+                "# Regenerate with scripts/fetch_mt5_history.py — "
                 "do not edit by hand.\n")
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
@@ -103,11 +107,17 @@ async def run(args: argparse.Namespace) -> None:
     end = datetime.datetime.now() + datetime.timedelta(days=1)
     res = await connection.get_deals_by_time_range(ACCOUNT_START, end)
     trades = deals_to_trades(res.get("deals", []))
-    write_csv(trades)
+
+    # Ask the account which login it is rather than assuming: the file is named
+    # after it, so pointing this script at a new demo writes a new file instead
+    # of clobbering the retired account's history.
+    info  = await connection.get_account_information()
+    login = str(info.get("login"))
+    out_csv = ROOT / "data" / "live" / f"mt5_history_{login}.csv"
+    write_csv(trades, out_csv, login)
 
     # Snapshot balance/equity/floating P&L so the dashboard can show the real
     # account total without deploying the terminal on every page load.
-    info = await connection.get_account_information()
     positions = await connection.get_positions()
     SNAPSHOT.write_text(json.dumps({
         "fetched_at": datetime.datetime.now().isoformat(timespec="seconds"),
@@ -135,7 +145,7 @@ async def run(args: argparse.Namespace) -> None:
     total  = sum(t["profit"] for t in closed)
     print(f"  {len(trades)} trades ({len(closed)} closed, "
           f"{len(trades) - len(closed)} open), closed profit {total:+.2f} USD")
-    print(f"  Written → {OUT_CSV.relative_to(ROOT)}")
+    print(f"  Written → {out_csv.relative_to(ROOT)}")
 
     if args.undeploy:
         print("  Undeploying account (stops MetaApi hourly billing; "

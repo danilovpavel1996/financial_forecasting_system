@@ -20,9 +20,9 @@ Spearman(predicted, realized 5d fwd log return) across all 15 pairs, per week.
 | 2026-08-14 |   0.1091 |        15 | 3/6          |          0.0001 |
 | 2026-08-21 |   0.2571 |        15 | 3/6          |          0.0014 |
 | 2026-08-28 |  -0.3262 |        15 | 4/6          |         -0.0051 |
-| 2026-09-04 |  -0.2020 |        15 | 4/6          |         -0.0015 |
+| 2026-09-04 |  -0.2109 |        15 | 4/6          |         -0.0012 |
 
-- Mean CS-RIC: **-0.1009** (SE ≈ 0.1080), positive weeks: 6/13
+- Mean CS-RIC: **-0.1016** (SE ≈ 0.1080), positive weeks: 6/13
 - Backtest OOS CS-RIC for this model: **+0.071** (no stored weekly backtest IC distribution exists, so this is a point comparison, not a percentile test).
 
 ## 2. Execution fidelity — signal book vs MT5 book (end of signal day)
@@ -46,12 +46,13 @@ Spearman(predicted, realized 5d fwd log return) across all 15 pairs, per week.
 
 ## 3. PnL — live vs paper
 
-- Live closed-trade PnL across both demo accounts: **-99.76 USD** on 2000 (-4.99%).
-  - Expired account 372709 (Jun 2 – Aug 14): -69.52 USD from the profit column; its MT5 footer read −77.15 including swaps, i.e. ≈ −7.5 USD of swap the backtest does not model.
-  - Current account 438689 (from Aug 14): -30.24 USD closed, 6 positions still open.
-  - Floating P&L on those open positions: -16.49 USD; balance 1970.37, equity 1953.99 (snapshot 2026-09-11T15:05:32).
+- Live closed-trade PnL across all demo accounts: **-99.76 USD** on 2000 (-4.99%).
+  - Retired account 372709 (opened with 2,000.00, history transcribed from an MT5 screenshot): -69.52 USD over 35 closed trades.
+  - Current account 438689 (opened with 2,000.00, history MetaApi): -30.24 USD over 15 closed trades, 6 still open.
+  - Account 372709's MT5 footer read −77.15 including swaps, i.e. ≈ −7.5 USD of swap the backtest does not model.
+  - Floating P&L on those open positions: -17.87 USD; balance 1970.37, equity 1952.66 (snapshot 2026-09-11T18:14:53).
 - Of which manual-entry fumbles (opened and closed within minutes): -0.96 USD across 7 trades.
-- Paper strategy (signal followed exactly, h=5 windows, 1/6 equal weight, 3 bps/side): **-3.42%** cumulative simple sum of weekly net returns.
+- Paper strategy (signal followed exactly, h=5 windows, 1/6 equal weight, 3 bps/side): **-3.39%** cumulative simple sum of weekly net returns.
 
 ## Honesty notes
 

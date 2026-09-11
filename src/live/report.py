@@ -39,18 +39,33 @@ LIVE_DIR   = ROOT / "data" / "live"
 REPORT_DIR = ROOT / "outputs" / "reports"
 EXEC_DIR   = ROOT / "outputs" / "executions"
 SNAPSHOT   = LIVE_DIR / "account_snapshot.json"
-# Trade history: hand-transcribed CSV for the first (expired) demo account,
-# plus the MetaApi-fetched CSV for the current one.
-MT5_CSVS   = [LIVE_DIR / "mt5_history_2026-08-14.csv",
-              LIVE_DIR / "mt5_history_metaapi.csv"]
+# Fusion demo accounts expire after 30 days, so the live record spans a chain
+# of them. Each account's trades live in their own file, named by MT5 login, so
+# a new account never overwrites an old one's history. Add a row here when you
+# create the next demo; `active` marks the one the executor trades and the one
+# fetch_mt5_history.py refreshes (every other file is frozen history).
+ACCOUNTS: dict[str, dict] = {
+    "372709": {"start_balance": 2000.00, "active": False,
+               "source": "transcribed from an MT5 screenshot"},
+    "438689": {"start_balance": 2000.00, "active": True,
+               "source": "MetaApi"},
+}
+
+
+def history_path(login: str) -> Path:
+    return LIVE_DIR / f"mt5_history_{login}.csv"
+
+
+MT5_CSVS = [history_path(login) for login in ACCOUNTS]
 
 HORIZON       = 5
 COST_BPS      = 3.0        # per side, same as the backtest charges
 BACKTEST_RIC  = 0.071      # Phase 20 OOS cross-sectional rank IC (mean)
 BACKTEST_SHARPE = 1.32     # Phase 20 OOS Sharpe, for context only
-START_BALANCE = 2000.0
-OLD_ACCOUNT   = "372709"   # expired demo, history transcribed from a screenshot
-NEW_ACCOUNT   = "438689"   # current demo, history via MetaApi
+START_BALANCE = 2000.0     # original capital in June 2026; the base every
+                           # cumulative percentage in the report is measured
+                           # against, regardless of what later demo accounts
+                           # happened to open with.
 # Fusion demos live 30 days. Override per environment with DEMO_EXPIRES;
 # scripts/preflight_check.py reads the same value to decide when to page.
 DEMO_EXPIRES_DEFAULT = "2026-09-13"
@@ -124,8 +139,8 @@ def load_mt5_trades() -> list[dict]:
             continue
         # Which account a trade belongs to cannot be decided from timestamps
         # (the transcribed file is broker-local, MetaApi returns UTC), but the
-        # source file settles it.
-        account = OLD_ACCOUNT if "2026-08-14" in path.name else NEW_ACCOUNT
+        # filename carries the MT5 login.
+        account = path.stem.replace("mt5_history_", "")
         with open(path) as f:
             for row in csv.DictReader(l for l in f if not l.startswith("#")):
                 rows.append({
@@ -340,14 +355,23 @@ def build_report() -> LiveReport:
                         if n_weeks > 1 else float("nan")),
         "pos_weeks":   int((ic["cs_ric"] > 0).sum()) if n_weeks else 0,
         "closed_pnl":  sum(t["profit"] for t in closed),
-        "old_pnl":     sum(t["profit"] for t in closed
-                           if t["account"] == OLD_ACCOUNT),
-        "new_pnl":     sum(t["profit"] for t in closed
-                           if t["account"] == NEW_ACCOUNT),
+        # One row per demo account in the chain, oldest first.
+        "per_account": [
+            {"login": login,
+             "active": meta["active"],
+             "source": meta["source"],
+             "start_balance": meta["start_balance"],
+             "closed_pnl": sum(t["profit"] for t in closed
+                               if t["account"] == login),
+             "n_trades": sum(1 for t in closed if t["account"] == login),
+             "n_open": sum(1 for t in trades if t["close_time"] is None
+                           and t["account"] == login)}
+            for login, meta in ACCOUNTS.items()
+        ],
         "fumble_pnl":  sum(t["profit"] for t in fumbles),
         "n_fumbles":   len(fumbles),
         "n_open":      sum(1 for t in trades if t["close_time"] is None
-                           and t["account"] == NEW_ACCOUNT),
+                           and ACCOUNTS.get(t["account"], {}).get("active")),
         "paper_total": float(ic["paper_ret_net"].sum()) if n_weeks else 0.0,
         "reconstructed_weeks": [s["date"] for s in sigs if s.get("reconstructed")],
         "n_clean_fidelity": int(fid["ok"].sum()) if len(fid) else 0,
