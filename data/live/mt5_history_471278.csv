@@ -1,0 +1,9 @@
+# MT5 history for demo login 471278, fetched from MetaApi.
+# Regenerate with scripts/fetch_mt5_history.py — do not edit by hand.
+open_time,symbol,side,volume,open_price,close_time,close_price,profit,note
+2026-09-11 15:38:29,audjpy,buy,0.01,110.22,,,,still_open;swap=0.00;commission=-0.02
+2026-09-11 15:38:34,euraud,sell,0.01,1.61759,,,,still_open;swap=0.00;commission=-0.02
+2026-09-11 15:38:36,eurjpy,buy,0.01,178.286,,,,still_open;swap=0.00;commission=-0.02
+2026-09-11 15:38:40,gbpaud,sell,0.01,1.8849,,,,still_open;swap=0.00;commission=-0.02
+2026-09-11 15:38:47,usdcad,sell,0.01,1.38725,,,,still_open;swap=0.00;commission=-0.02
+2026-09-11 15:38:53,usdjpy,buy,0.01,153.657,,,,still_open;swap=0.00;commission=-0.02

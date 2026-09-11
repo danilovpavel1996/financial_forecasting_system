@@ -48,9 +48,10 @@ Spearman(predicted, realized 5d fwd log return) across all 15 pairs, per week.
 
 - Live closed-trade PnL across all demo accounts: **-99.76 USD** on 2000 (-4.99%).
   - Retired account 372709 (opened with 2,000.00, history transcribed from an MT5 screenshot): -69.52 USD over 35 closed trades.
-  - Current account 438689 (opened with 2,000.00, history MetaApi): -30.24 USD over 15 closed trades, 6 still open.
+  - Retired account 438689 (opened with 2,000.00, history MetaApi): -30.24 USD over 15 closed trades.
+  - Current account 471278 (opened with 1,970.37, history MetaApi): +0.00 USD over 0 closed trades, 6 still open.
   - Account 372709's MT5 footer read −77.15 including swaps, i.e. ≈ −7.5 USD of swap the backtest does not model.
-  - Floating P&L on those open positions: -17.87 USD; balance 1970.37, equity 1952.66 (snapshot 2026-09-11T18:14:53).
+  - Floating P&L on those open positions: -0.31 USD; balance 1970.25, equity 1970.01 (snapshot 2026-09-11T18:39:55).
 - Of which manual-entry fumbles (opened and closed within minutes): -0.96 USD across 7 trades.
 - Paper strategy (signal followed exactly, h=5 windows, 1/6 equal weight, 3 bps/side): **-3.39%** cumulative simple sum of weekly net returns.
 

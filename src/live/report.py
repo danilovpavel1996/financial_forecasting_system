@@ -47,7 +47,12 @@ SNAPSHOT   = LIVE_DIR / "account_snapshot.json"
 ACCOUNTS: dict[str, dict] = {
     "372709": {"start_balance": 2000.00, "active": False,
                "source": "transcribed from an MT5 screenshot"},
-    "438689": {"start_balance": 2000.00, "active": True,
+    "438689": {"start_balance": 2000.00, "active": False,
+               "source": "MetaApi"},
+    # Opened with the balance 438689 carried at handover rather than a fresh
+    # 2,000, so this account's own return is measured from 1,970.37 while every
+    # cumulative figure still uses START_BALANCE as the June base.
+    "471278": {"start_balance": 1970.37, "active": True,
                "source": "MetaApi"},
 }
 
@@ -68,7 +73,7 @@ START_BALANCE = 2000.0     # original capital in June 2026; the base every
                            # happened to open with.
 # Fusion demos live 30 days. Override per environment with DEMO_EXPIRES;
 # scripts/preflight_check.py reads the same value to decide when to page.
-DEMO_EXPIRES_DEFAULT = "2026-09-13"
+DEMO_EXPIRES_DEFAULT = "2026-10-11"   # 471278, created 2026-09-11
 
 
 def demo_expiry() -> datetime.date:
