@@ -1,0 +1,91 @@
+{
+  "executed_at": "2026-09-18T15:03:15",
+  "signal_date": "2026-09-18",
+  "status": "OK",
+  "book_before": {
+    "USDJPY": "buy",
+    "AUDJPY": "buy",
+    "EURAUD": "sell",
+    "EURJPY": "buy",
+    "GBPAUD": "sell",
+    "USDCAD": "sell"
+  },
+  "planned_closes": [
+    "EURAUD",
+    "EURJPY",
+    "GBPAUD",
+    "USDCAD"
+  ],
+  "planned_opens": [
+    [
+      "AUDUSD",
+      "sell"
+    ],
+    [
+      "CADJPY",
+      "buy"
+    ],
+    [
+      "GBPUSD",
+      "sell"
+    ],
+    [
+      "NZDUSD",
+      "sell"
+    ]
+  ],
+  "order_results": [
+    {
+      "action": "close",
+      "symbol": "EURAUD",
+      "result": "{'stringCode': 'TRADE_RETCODE_DONE', 'numericCode': 10009, 'message': 'Request completed', 'orderId': '537832327', 'positionId': '537832327', 'tradeExecutionTime': datetime.datetime(2026, 9, 18, 18, 3, 11, 658000, tzinfo=datetime.timezone.utc), 'tradeStartTime': datetime.datetime(2026, 9, 18, 15, 3, 11, 112000, tzinfo=datetime.timezone.utc)}"
+    },
+    {
+      "action": "close",
+      "symbol": "EURJPY",
+      "result": "{'stringCode': 'TRADE_RETCODE_DONE', 'numericCode': 10009, 'message': 'Request completed', 'orderId': '537832330', 'positionId': '537832330', 'tradeExecutionTime': datetime.datetime(2026, 9, 18, 18, 3, 11, 825000, tzinfo=datetime.timezone.utc), 'tradeStartTime': datetime.datetime(2026, 9, 18, 15, 3, 11, 286000, tzinfo=datetime.timezone.utc)}"
+    },
+    {
+      "action": "close",
+      "symbol": "GBPAUD",
+      "result": "{'stringCode': 'TRADE_RETCODE_DONE', 'numericCode': 10009, 'message': 'Request completed', 'orderId': '537832398', 'positionId': '537832398', 'tradeExecutionTime': datetime.datetime(2026, 9, 18, 18, 3, 11, 982000, tzinfo=datetime.timezone.utc), 'tradeStartTime': datetime.datetime(2026, 9, 18, 15, 3, 11, 440000, tzinfo=datetime.timezone.utc)}"
+    },
+    {
+      "action": "close",
+      "symbol": "USDCAD",
+      "result": "{'stringCode': 'TRADE_RETCODE_DONE', 'numericCode': 10009, 'message': 'Request completed', 'orderId': '537832434', 'positionId': '537832434', 'tradeExecutionTime': datetime.datetime(2026, 9, 18, 18, 3, 12, 77000, tzinfo=datetime.timezone.utc), 'tradeStartTime': datetime.datetime(2026, 9, 18, 15, 3, 11, 539000, tzinfo=datetime.timezone.utc)}"
+    },
+    {
+      "action": "open",
+      "symbol": "AUDUSD",
+      "side": "sell",
+      "result": "{'stringCode': 'TRADE_RETCODE_DONE', 'numericCode': 10009, 'message': 'Request completed', 'orderId': '546059217', 'positionId': '546059217', 'tradeExecutionTime': datetime.datetime(2026, 9, 18, 18, 3, 12, 190000, tzinfo=datetime.timezone.utc), 'tradeStartTime': datetime.datetime(2026, 9, 18, 15, 3, 11, 648000, tzinfo=datetime.timezone.utc)}"
+    },
+    {
+      "action": "open",
+      "symbol": "CADJPY",
+      "side": "buy",
+      "result": "{'stringCode': 'TRADE_RETCODE_DONE', 'numericCode': 10009, 'message': 'Request completed', 'orderId': '546059221', 'positionId': '546059221', 'tradeExecutionTime': datetime.datetime(2026, 9, 18, 18, 3, 12, 513000, tzinfo=datetime.timezone.utc), 'tradeStartTime': datetime.datetime(2026, 9, 18, 15, 3, 11, 974000, tzinfo=datetime.timezone.utc)}"
+    },
+    {
+      "action": "open",
+      "symbol": "GBPUSD",
+      "side": "sell",
+      "result": "{'stringCode': 'TRADE_RETCODE_DONE', 'numericCode': 10009, 'message': 'Request completed', 'orderId': '546059278', 'positionId': '546059278', 'tradeExecutionTime': datetime.datetime(2026, 9, 18, 18, 3, 15, 45000, tzinfo=datetime.timezone.utc), 'tradeStartTime': datetime.datetime(2026, 9, 18, 15, 3, 14, 503000, tzinfo=datetime.timezone.utc)}"
+    },
+    {
+      "action": "open",
+      "symbol": "NZDUSD",
+      "side": "sell",
+      "result": "{'stringCode': 'TRADE_RETCODE_DONE', 'numericCode': 10009, 'message': 'Request completed', 'orderId': '546059310', 'positionId': '546059310', 'tradeExecutionTime': datetime.datetime(2026, 9, 18, 18, 3, 15, 375000, tzinfo=datetime.timezone.utc), 'tradeStartTime': datetime.datetime(2026, 9, 18, 15, 3, 14, 833000, tzinfo=datetime.timezone.utc)}"
+    }
+  ],
+  "book_after_verified": {
+    "USDJPY": "buy",
+    "AUDJPY": "buy",
+    "AUDUSD": "sell",
+    "CADJPY": "buy",
+    "GBPUSD": "sell",
+    "NZDUSD": "sell"
+  }
+}

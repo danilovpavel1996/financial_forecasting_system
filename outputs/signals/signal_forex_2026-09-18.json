@@ -1,0 +1,114 @@
+{
+  "date": "2026-09-18",
+  "feature_date": "2026-09-18",
+  "horizon": 5,
+  "model_name": "LightGBM",
+  "model_trained_on": "2026-09-18",
+  "rankings": [
+    {
+      "ticker": "CADJPY=X",
+      "mt5": "CADJPY",
+      "position": "LONG",
+      "predicted_return": 0.001251,
+      "rank": 1
+    },
+    {
+      "ticker": "USDJPY=X",
+      "mt5": "USDJPY",
+      "position": "LONG",
+      "predicted_return": 0.001123,
+      "rank": 2
+    },
+    {
+      "ticker": "AUDJPY=X",
+      "mt5": "AUDJPY",
+      "position": "LONG",
+      "predicted_return": 0.001086,
+      "rank": 3
+    },
+    {
+      "ticker": "EURJPY=X",
+      "mt5": "EURJPY",
+      "position": "FLAT",
+      "predicted_return": 0.001085,
+      "rank": 4
+    },
+    {
+      "ticker": "GBPJPY=X",
+      "mt5": "GBPJPY",
+      "position": "FLAT",
+      "predicted_return": 0.001085,
+      "rank": 5
+    },
+    {
+      "ticker": "USDCHF=X",
+      "mt5": "USDCHF",
+      "position": "FLAT",
+      "predicted_return": 0.000821,
+      "rank": 6
+    },
+    {
+      "ticker": "USDCAD=X",
+      "mt5": "USDCAD",
+      "position": "FLAT",
+      "predicted_return": 0.000595,
+      "rank": 7
+    },
+    {
+      "ticker": "AUDNZD=X",
+      "mt5": "AUDNZD",
+      "position": "FLAT",
+      "predicted_return": 0.000326,
+      "rank": 8
+    },
+    {
+      "ticker": "EURAUD=X",
+      "mt5": "EURAUD",
+      "position": "FLAT",
+      "predicted_return": 0.00011,
+      "rank": 9
+    },
+    {
+      "ticker": "GBPAUD=X",
+      "mt5": "GBPAUD",
+      "position": "FLAT",
+      "predicted_return": 0.00011,
+      "rank": 10
+    },
+    {
+      "ticker": "EURGBP=X",
+      "mt5": "EURGBP",
+      "position": "FLAT",
+      "predicted_return": 0.000108,
+      "rank": 11
+    },
+    {
+      "ticker": "EURUSD=X",
+      "mt5": "EURUSD",
+      "position": "FLAT",
+      "predicted_return": -0.000204,
+      "rank": 12
+    },
+    {
+      "ticker": "AUDUSD=X",
+      "mt5": "AUDUSD",
+      "position": "SHORT",
+      "predicted_return": -0.000236,
+      "rank": 13
+    },
+    {
+      "ticker": "GBPUSD=X",
+      "mt5": "GBPUSD",
+      "position": "SHORT",
+      "predicted_return": -0.000568,
+      "rank": 14
+    },
+    {
+      "ticker": "NZDUSD=X",
+      "mt5": "NZDUSD",
+      "position": "SHORT",
+      "predicted_return": -0.001188,
+      "rank": 15
+    }
+  ]
+}

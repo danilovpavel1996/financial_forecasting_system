@@ -1,63 +1,63 @@
 {
-  "fetched_at": "2026-09-11T18:39:55",
-  "login": 471278,
-  "balance": 1970.25,
-  "equity": 1970.01,
-  "margin": 63.89,
-  "floating_pnl": -0.31,
+  "fetched_at": "2026-09-18T15:03:49",
+  "login": 438689,
+  "balance": 1981.73,
+  "equity": 1999.7,
+  "margin": 50.49,
+  "floating_pnl": 17.79,
   "positions": [
-    {
-      "symbol": "AUDJPY",
-      "side": "buy",
-      "volume": 0.01,
-      "openPrice": 110.22,
-      "currentPrice": 110.216,
-      "profit": -0.05,
-      "swap": 0
-    },
-    {
-      "symbol": "EURAUD",
-      "side": "sell",
-      "volume": 0.01,
-      "openPrice": 1.61759,
-      "currentPrice": 1.61754,
-      "profit": 0.02,
-      "swap": 0
-    },
-    {
-      "symbol": "EURJPY",
-      "side": "buy",
-      "volume": 0.01,
-      "openPrice": 178.286,
-      "currentPrice": 178.281,
-      "profit": -0.05,
-      "swap": 0
-    },
-    {
-      "symbol": "GBPAUD",
-      "side": "sell",
-      "volume": 0.01,
-      "openPrice": 1.8849,
-      "currentPrice": 1.88495,
-      "profit": -0.06,
-      "swap": 0
-    },
-    {
-      "symbol": "USDCAD",
-      "side": "sell",
-      "volume": 0.01,
-      "openPrice": 1.38725,
-      "currentPrice": 1.38732,
-      "profit": -0.07,
-      "swap": 0
-    },
     {
       "symbol": "USDJPY",
       "side": "buy",
       "volume": 0.01,
-      "openPrice": 153.657,
-      "currentPrice": 153.645,
-      "profit": -0.1,
+      "openPrice": 156.067,
+      "currentPrice": 157.2,
+      "profit": 7.76,
+      "swap": 0.57
+    },
+    {
+      "symbol": "AUDJPY",
+      "side": "buy",
+      "volume": 0.01,
+      "openPrice": 110.129,
+      "currentPrice": 111.725,
+      "profit": 10.4,
+      "swap": 0.27
+    },
+    {
+      "symbol": "AUDUSD",
+      "side": "sell",
+      "volume": 0.01,
+      "openPrice": 0.71077,
+      "currentPrice": 0.71075,
+      "profit": 0,
+      "swap": 0
+    },
+    {
+      "symbol": "CADJPY",
+      "side": "buy",
+      "volume": 0.01,
+      "openPrice": 112.263,
+      "currentPrice": 112.225,
+      "profit": -0.26,
+      "swap": 0
+    },
+    {
+      "symbol": "GBPUSD",
+      "side": "sell",
+      "volume": 0.01,
+      "openPrice": 1.336,
+      "currentPrice": 1.33609,
+      "profit": -0.11,
+      "swap": 0
+    },
+    {
+      "symbol": "NZDUSD",
+      "side": "sell",
+      "volume": 0.01,
+      "openPrice": 0.57097,
+      "currentPrice": 0.57095,
+      "profit": 0,
       "swap": 0
     }
   ]
