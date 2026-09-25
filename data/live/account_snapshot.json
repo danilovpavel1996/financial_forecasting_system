@@ -1,63 +1,63 @@
 {
-  "fetched_at": "2026-09-18T15:03:49",
+  "fetched_at": "2026-09-25T15:03:51",
   "login": 438689,
-  "balance": 1981.73,
-  "equity": 1999.7,
-  "margin": 50.49,
-  "floating_pnl": 17.79,
+  "balance": 2006.48,
+  "equity": 2011.03,
+  "margin": 57.55,
+  "floating_pnl": 4.34,
   "positions": [
     {
       "symbol": "USDJPY",
       "side": "buy",
       "volume": 0.01,
       "openPrice": 156.067,
-      "currentPrice": 157.2,
-      "profit": 7.76,
-      "swap": 0.57
+      "currentPrice": 157.24,
+      "profit": 8.29,
+      "swap": 0.85
     },
     {
       "symbol": "AUDJPY",
       "side": "buy",
       "volume": 0.01,
       "openPrice": 110.129,
-      "currentPrice": 111.725,
-      "profit": 10.4,
-      "swap": 0.27
-    },
-    {
-      "symbol": "AUDUSD",
-      "side": "sell",
-      "volume": 0.01,
-      "openPrice": 0.71077,
-      "currentPrice": 0.71075,
-      "profit": 0,
-      "swap": 0
+      "currentPrice": 110.477,
+      "profit": 2.69,
+      "swap": 0.5
     },
     {
       "symbol": "CADJPY",
       "side": "buy",
       "volume": 0.01,
       "openPrice": 112.263,
-      "currentPrice": 112.225,
-      "profit": -0.26,
+      "currentPrice": 111.219,
+      "profit": -6.6,
+      "swap": 0.06
+    },
+    {
+      "symbol": "GBPAUD",
+      "side": "sell",
+      "volume": 0.01,
+      "openPrice": 1.88456,
+      "currentPrice": 1.88427,
+      "profit": 0.18,
       "swap": 0
     },
     {
-      "symbol": "GBPUSD",
+      "symbol": "USDCAD",
       "side": "sell",
       "volume": 0.01,
-      "openPrice": 1.336,
-      "currentPrice": 1.33609,
-      "profit": -0.11,
+      "openPrice": 1.41365,
+      "currentPrice": 1.41384,
+      "profit": -0.15,
       "swap": 0
     },
     {
-      "symbol": "NZDUSD",
+      "symbol": "USDCHF",
       "side": "sell",
       "volume": 0.01,
-      "openPrice": 0.57097,
-      "currentPrice": 0.57095,
-      "profit": 0,
+      "openPrice": 0.82857,
+      "currentPrice": 0.82861,
+      "profit": -0.07,
       "swap": 0
     }
   ]
