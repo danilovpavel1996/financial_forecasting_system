@@ -1,6 +1,6 @@
 # Live forex report — 2026-10-02
 
-Window: 2026-06-03 → 2026-09-25 (16 realizable signal weeks; the newest signal has no realized 5d return yet).
+Window: 2026-06-03 → 2026-09-18 (15 realizable signal weeks; the newest signal has no realized 5d return yet).
 
 ## 1. Signal quality — weekly cross-sectional rank IC
 
@@ -23,9 +23,8 @@ Spearman(predicted, realized 5d fwd log return) across all 15 pairs, per week.
 | 2026-09-04 |  -0.0769 |        15 | 4/6          |          0.0006 |
 | 2026-09-11 |   0.3036 |        15 | 4/6          |          0.0019 |
 | 2026-09-18 |   0.7102 |        15 | 6/6          |          0.0099 |
-| 2026-09-25 |  -0.7585 |        15 | 0/6          |         -0.0086 |
 
-- Mean CS-RIC: **-0.0582** (SE ≈ 0.1124), positive weeks: 8/16
+- Mean CS-RIC: **-0.0115** (SE ≈ 0.1093), positive weeks: 8/15
 - Backtest OOS CS-RIC for this model: **+0.071** (no stored weekly backtest IC distribution exists, so this is a point comparison, not a percentile test).
 
 ## 2. Execution fidelity — signal book vs MT5 book (end of signal day)
@@ -54,16 +53,16 @@ Spearman(predicted, realized 5d fwd log return) across all 15 pairs, per week.
 
 - Live closed-trade PnL across all demo accounts: **-52.67 USD** on 2000 (-2.63%).
   - Retired account 372709 (opened with 2,000.00, history transcribed from an MT5 screenshot): -69.52 USD over 35 closed trades.
-  - Retired account 438689 (opened with 2,000.00, history MetaApi): +16.85 USD over 23 closed trades, 6 still open.
-  - Current account 471278 (opened with 1,970.37, history MetaApi): +0.00 USD over 0 closed trades, 6 still open.
+  - Current account 438689 (opened with 2,000.00, history MetaApi): +16.85 USD over 23 closed trades, 6 still open.
+  - Retired account 471278 (opened with 1,970.37, history MetaApi, stray book from an abandoned switch): +0.00 USD over 0 closed trades, 6 still open.
   - Account 372709's MT5 footer read −77.15 including swaps, i.e. ≈ −7.5 USD of swap the backtest does not model.
   - Floating P&L on those open positions: -35.41 USD; balance 2018.08, equity 1984.52 (snapshot 2026-10-02T15:06:50).
 - Of which manual-entry fumbles (opened and closed within minutes): -0.96 USD across 7 trades.
-- Paper strategy (signal followed exactly, h=5 windows, 1/6 equal weight, 3 bps/side): **-2.89%** cumulative simple sum of weekly net returns.
+- Paper strategy (signal followed exactly, h=5 windows, 1/6 equal weight, 3 bps/side): **-2.02%** cumulative simple sum of weekly net returns.
 
 ## Honesty notes
 
-- 16 weekly observations: portfolio Sharpe/return over this window is statistically uninformative (SE of annualized Sharpe ≈ ±2.2). It is deliberately not reported. The IC row count (15 pairs × weeks) is the only metric here with any power.
+- 15 weekly observations: portfolio Sharpe/return over this window is statistically uninformative (SE of annualized Sharpe ≈ ±2.2). It is deliberately not reported. The IC row count (15 pairs × weeks) is the only metric here with any power.
 - MT5 history for the first (expired) demo account was transcribed from a screenshot; `profit` values are as-displayed, three close prices were unreadable. History for the current account comes from the MetaApi API.
 - The most recent week's IC is provisional: it is computed from the price snapshot taken during the signal run, before that day's close settles. Values shift slightly once the data finalizes (2026-08-07 read +0.67 one week, +0.48 the next).
 - Reconstructed signal weeks (predictions regenerated after the original file was lost, so their IC is approximate): 2026-08-21.

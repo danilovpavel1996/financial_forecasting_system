@@ -47,13 +47,19 @@ SNAPSHOT   = LIVE_DIR / "account_snapshot.json"
 ACCOUNTS: dict[str, dict] = {
     "372709": {"start_balance": 2000.00, "active": False,
                "source": "transcribed from an MT5 screenshot"},
-    "438689": {"start_balance": 2000.00, "active": False,
+    # Still the account the weekly cron trades. It was expected to expire on
+    # 2026-09-13 and was marked retired on 2026-09-11, but Fusion did not
+    # actually close it and METAAPI_ACCOUNT_ID was never changed in Railway,
+    # so every run since has traded here. Do not retire an account until a
+    # live run is observed on its replacement.
+    "438689": {"start_balance": 2000.00, "active": True,
                "source": "MetaApi"},
-    # Opened with the balance 438689 carried at handover rather than a fresh
-    # 2,000, so this account's own return is measured from 1,970.37 while every
-    # cumulative figure still uses START_BALANCE as the June base.
-    "471278": {"start_balance": 1970.37, "active": True,
-               "source": "MetaApi"},
+    # Stray: the 2026-09-11 book was opened here during a switch that never
+    # reached production, then left unmanaged. Its positions are NOT strategy
+    # trades (held for weeks instead of one rebalance period) and it has no
+    # closed P&L, so it does not affect any cumulative figure.
+    "471278": {"start_balance": 1970.37, "active": False,
+               "source": "MetaApi, stray book from an abandoned switch"},
 }
 
 
