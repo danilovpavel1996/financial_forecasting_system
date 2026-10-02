@@ -1,9 +1,15 @@
 # MT5 history for demo login 471278, fetched from MetaApi.
 # Regenerate with scripts/fetch_mt5_history.py — do not edit by hand.
 open_time,symbol,side,volume,open_price,close_time,close_price,profit,note
-2026-09-11 15:38:29,audjpy,buy,0.01,110.22,,,,still_open;swap=0.00;commission=-0.02
-2026-09-11 15:38:34,euraud,sell,0.01,1.61759,,,,still_open;swap=0.00;commission=-0.02
-2026-09-11 15:38:36,eurjpy,buy,0.01,178.286,,,,still_open;swap=0.00;commission=-0.02
-2026-09-11 15:38:40,gbpaud,sell,0.01,1.8849,,,,still_open;swap=0.00;commission=-0.02
-2026-09-11 15:38:47,usdcad,sell,0.01,1.38725,,,,still_open;swap=0.00;commission=-0.02
-2026-09-11 15:38:53,usdjpy,buy,0.01,153.657,,,,still_open;swap=0.00;commission=-0.02
+2026-09-11 15:38:29,audjpy,buy,0.01,110.22,2026-10-02 17:13:25,109.675,-3.45,swap=0.77;commission=-0.04
+2026-09-11 15:38:34,euraud,sell,0.01,1.61759,2026-10-02 17:13:25,1.61993,-1.63,swap=0.83;commission=-0.04
+2026-09-11 15:38:36,eurjpy,buy,0.01,178.286,2026-10-02 17:13:26,177.671,-3.9,swap=0.43;commission=-0.04
+2026-09-11 15:38:40,gbpaud,sell,0.01,1.8849,2026-10-02 17:13:26,1.90436,-13.52,swap=-0.22;commission=-0.04
+2026-09-11 15:38:47,usdcad,sell,0.01,1.38725,2026-10-02 17:13:26,1.42567,-26.95,swap=-1.40;commission=-0.04
+2026-09-11 15:38:53,usdjpy,buy,0.01,153.657,2026-10-02 17:13:26,157.843,26.52,swap=0.87;commission=-0.04
+2026-10-02 17:19:48,audjpy,buy,0.01,109.688,,,,still_open;swap=0.00;commission=-0.02
+2026-10-02 17:19:50,cadjpy,buy,0.01,110.7,,,,still_open;swap=0.00;commission=-0.02
+2026-10-02 17:19:50,eurjpy,buy,0.01,177.654,,,,still_open;swap=0.00;commission=-0.02
+2026-10-02 17:19:53,gbpaud,sell,0.01,1.90411,,,,still_open;swap=0.00;commission=-0.02
+2026-10-02 17:19:53,usdcad,sell,0.01,1.42568,,,,still_open;swap=0.00;commission=-0.02
+2026-10-02 17:19:56,usdchf,sell,0.01,0.82911,,,,still_open;swap=0.00;commission=-0.02

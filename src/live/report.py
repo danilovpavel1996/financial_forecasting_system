@@ -47,19 +47,21 @@ SNAPSHOT   = LIVE_DIR / "account_snapshot.json"
 ACCOUNTS: dict[str, dict] = {
     "372709": {"start_balance": 2000.00, "active": False,
                "source": "transcribed from an MT5 screenshot"},
-    # Still the account the weekly cron trades. It was expected to expire on
-    # 2026-09-13 and was marked retired on 2026-09-11, but Fusion did not
-    # actually close it and METAAPI_ACCOUNT_ID was never changed in Railway,
-    # so every run since has traded here. Do not retire an account until a
-    # live run is observed on its replacement.
-    "438689": {"start_balance": 2000.00, "active": True,
-               "source": "MetaApi"},
-    # Stray: the 2026-09-11 book was opened here during a switch that never
-    # reached production, then left unmanaged. Its positions are NOT strategy
-    # trades (held for weeks instead of one rebalance period) and it has no
-    # closed P&L, so it does not affect any cumulative figure.
-    "471278": {"start_balance": 1970.37, "active": False,
-               "source": "MetaApi, stray book from an abandoned switch"},
+    # Traded 2026-08-14 → 2026-10-02. Its MetaApi account was deleted on
+    # 2026-10-02, so this file can no longer be refreshed and is frozen; the
+    # six positions it still held at Fusion are orphaned and never realize.
+    "438689": {"start_balance": 2000.00, "active": False,
+               "source": "MetaApi (frozen; account deleted 2026-10-02)"},
+    # Live from 2026-10-02. `active_from` exists because this account also
+    # holds a stray book opened 2026-09-11 by a switch that never reached
+    # production and closed out on 2026-10-02 for -21.79. Those were held for
+    # three weeks rather than one rebalance period, so they are not strategy
+    # trades. The cut-off is enforced on every load, which matters because the
+    # weekly fetch rewrites this file from MetaApi and would otherwise keep
+    # pulling them back in.
+    "471278": {"start_balance": 1970.37, "active": True,
+               "source": "MetaApi",
+               "active_from": "2026-10-02 00:00:00"},
 }
 
 
@@ -152,8 +154,13 @@ def load_mt5_trades() -> list[dict]:
         # (the transcribed file is broker-local, MetaApi returns UTC), but the
         # filename carries the MT5 login.
         account = path.stem.replace("mt5_history_", "")
+        # Trades opened before an account went live are not strategy trades.
+        cutoff = ACCOUNTS.get(account, {}).get("active_from")
+        cutoff = pd.Timestamp(cutoff) if cutoff else None
         with open(path) as f:
             for row in csv.DictReader(l for l in f if not l.startswith("#")):
+                if cutoff is not None and pd.Timestamp(row["open_time"]) < cutoff:
+                    continue
                 rows.append({
                     "account":    account,
                     "open_time":  pd.Timestamp(row["open_time"]),
