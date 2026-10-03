@@ -308,6 +308,34 @@ def pnl_timeseries(trades: list[dict]) -> pd.DataFrame:
     return cum
 
 
+def project_wallet(weekly_pnl: pd.Series, start_value: float, weeks: int = 12,
+                   n_paths: int = 4000, seed: int = 7) -> pd.DataFrame:
+    """Bootstrap where the wallet lands if future weeks resemble past ones.
+
+    This is NOT a forecast. It resamples the weekly P&L actually observed, with
+    replacement, and reports the spread of resulting paths. It says only: "if
+    the next `weeks` weeks are drawn from the same hat as the last ones, here
+    is how wide the outcomes are." It cannot know whether the model has an
+    edge — the live sample is far too small to establish one — so the centre
+    of the fan is simply the historical mean, not a prediction of profit.
+
+    Returns a frame indexed 0..weeks with p10/p50/p90 wallet values.
+    """
+    obs = weekly_pnl.dropna().values
+    if len(obs) < 4:
+        return pd.DataFrame()
+    rng = np.random.default_rng(seed)
+    draws = rng.choice(obs, size=(n_paths, weeks), replace=True)
+    paths = start_value + np.cumsum(draws, axis=1)
+    paths = np.hstack([np.full((n_paths, 1), start_value), paths])
+    return pd.DataFrame({
+        "week": range(weeks + 1),
+        "p10": np.percentile(paths, 10, axis=0),
+        "p50": np.percentile(paths, 50, axis=0),
+        "p90": np.percentile(paths, 90, axis=0),
+    })
+
+
 @dataclass
 class LiveReport:
     signals: list[dict]
@@ -321,6 +349,20 @@ class LiveReport:
     @property
     def latest_signal(self) -> dict | None:
         return self.signals[-1] if self.signals else None
+
+    def weekly_pnl(self) -> pd.Series:
+        """Realized P&L per week, in USD — the money view of each week."""
+        if self.pnl.empty:
+            return pd.Series(dtype=float)
+        weekly = self.pnl["TOTAL"].resample("W-FRI").last().ffill()
+        return weekly.diff().fillna(weekly.iloc[0])
+
+    def per_pair_pnl(self) -> pd.Series:
+        """Realized P&L per currency pair, worst first."""
+        if self.pnl.empty:
+            return pd.Series(dtype=float)
+        finals = self.pnl.drop(columns="TOTAL").iloc[-1]
+        return finals[finals != 0].sort_values()
 
     def positions(self) -> pd.DataFrame:
         """The current target book with live per-position P&L when available."""
@@ -400,6 +442,31 @@ def build_report() -> LiveReport:
     # (This happened for real: .dockerignore's "data/live/*/" was cleaned to
     # "data/live/*" and dropped the transcribed history from the image.)
     stats["missing_history"] = [p.name for p in MT5_CSVS if not p.exists()]
+    # ── The money view ────────────────────────────────────────────────────
+    # Account balances reset whenever a demo is replaced, so the honest
+    # "what would 2,000 be worth" figure is the original capital plus every
+    # realized trade since, plus what is currently floating.
+    floating = (snapshot or {}).get("floating_pnl")
+    stats["wallet_value"] = (START_BALANCE + stats["closed_pnl"]
+                             + (floating or 0.0))
+    stats["total_pnl"] = stats["closed_pnl"] + (floating or 0.0)
+    winners = [t for t in closed if t["profit"] > 0]
+    stats["n_closed_trades"] = len(closed)
+    stats["n_winners"] = len(winners)
+    stats["win_rate"] = len(winners) / len(closed) if closed else float("nan")
+    stats["avg_win"] = (sum(t["profit"] for t in winners) / len(winners)
+                        if winners else 0.0)
+    losers = [t for t in closed if t["profit"] <= 0]
+    stats["avg_loss"] = (sum(t["profit"] for t in losers) / len(losers)
+                         if losers else 0.0)
+    if closed:
+        best = max(closed, key=lambda t: t["profit"])
+        worst = min(closed, key=lambda t: t["profit"])
+        stats["best_trade"] = (best["symbol"], best["profit"])
+        stats["worst_trade"] = (worst["symbol"], worst["profit"])
+    else:
+        stats["best_trade"] = stats["worst_trade"] = (None, 0.0)
+
     stats["prices_through"] = (last_price.date().isoformat()
                                if last_price is not None else None)
     stats["unscored_signals"] = [s["date"] for s in sigs
