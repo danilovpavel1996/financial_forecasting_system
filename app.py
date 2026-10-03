@@ -302,23 +302,44 @@ st.write("")
 
 st.subheader("Which currency pairs made or lost the money")
 
+pair_stats = rep.per_pair_stats()
 pairs = rep.per_pair_pnl()
 if pairs.empty:
     st.write("No closed trades yet.")
 else:
     labels = [PAIR_NAMES.get(k, k) for k in pairs.index]
+    counts = pair_stats.loc[pairs.index, "n_trades"]
+    wins = pair_stats.loc[pairs.index, "n_wins"]
     bar = go.Figure(go.Bar(
         x=pairs.values, y=labels, orientation="h",
         marker_color=[GAIN if v > 0 else LOSS for v in pairs.values],
         marker_line_width=0,
         text=[f"{v:+,.0f}" for v in pairs.values], textposition="outside",
         textfont=dict(color=MUTED),
-        hovertemplate="<b>%{y}</b><br>%{x:+,.2f} USD<extra></extra>",
+        customdata=list(zip(counts, wins)),
+        hovertemplate="<b>%{y}</b><br>%{x:+,.2f} USD over %{customdata[0]} "
+                      "trades<br>%{customdata[1]} of them profitable"
+                      "<extra></extra>",
     ))
     bar.add_vline(x=0, line_width=1.5, line_color=MUTED)
-    base_layout(bar, 30 * len(pairs) + 90, None)
+    base_layout(bar, 30 * len(pairs) + 110, None)
+    # A pair's total reads very differently over 2 trades than over 8, so the
+    # count sits beside every bar as its own right-hand column.
+    for lbl, n, w in zip(labels, counts, wins):
+        bar.add_annotation(xref="paper", x=1.0, xanchor="left", y=lbl,
+                           yref="y",
+                           text=f"{n} trade{'s' if n != 1 else ''} · {w} won",
+                           showarrow=False, font=dict(size=11, color=MUTED))
+    bar.add_annotation(xref="paper", x=1.0, xanchor="left", yref="paper",
+                       y=1.0, yanchor="bottom", text="<b>from</b>",
+                       showarrow=False, font=dict(size=11, color=MUTED))
+    # Leave room inside the plot for the outside value labels, otherwise the
+    # longest bar's label runs into the trade-count column.
+    span = max(abs(float(pairs.min())), abs(float(pairs.max())))
+    bar.update_xaxes(range=[float(pairs.min()) - 0.18 * span,
+                            float(pairs.max()) + 0.18 * span])
     bar.update_layout(
-        bargap=0.35,
+        bargap=0.35, margin=dict(l=10, r=140, t=28, b=10),
         xaxis=dict(title=dict(text="Realized P&L (USD)",
                               font=dict(color=MUTED)),
                    gridcolor=GRID, zeroline=False,
@@ -327,13 +348,16 @@ else:
     st.plotly_chart(bar, width="stretch")
 
     worst_sym, worst_val = s["worst_trade"]
+    worst_pair = PAIR_NAMES.get(worst_sym, worst_sym)
+    worst_n = int(pair_stats.loc[worst_sym, "n_trades"]) if worst_sym in pair_stats.index else 0
     st.caption(
-        f"Money banked per pair across every account. The single worst trade "
-        f"was {PAIR_NAMES.get(worst_sym, worst_sym)} at {money(worst_val)}; the "
-        f"best was {PAIR_NAMES.get(s['best_trade'][0], s['best_trade'][0])} at "
-        f"{money(s['best_trade'][1])}. With only a handful of trades per pair, "
-        "treat these differences as luck rather than evidence that the model "
-        "is good or bad at particular currencies."
+        f"Money banked per pair across every account, with the number of "
+        f"trades behind each figure. That count matters: "
+        f"{worst_pair} is the worst line on the chart, and it came from "
+        f"{'a single trade' if worst_n == 1 else f'just {worst_n} trades'} "
+        f"losing {money(worst_val)} — one bad week, not a pattern. "
+        f"At one to seven trades per pair, none of these differences is "
+        "evidence that the model is good or bad at particular currencies."
     )
 
     with st.expander("Each pair's running total over time"):

@@ -364,6 +364,24 @@ class LiveReport:
         finals = self.pnl.drop(columns="TOTAL").iloc[-1]
         return finals[finals != 0].sort_values()
 
+    def per_pair_stats(self) -> pd.DataFrame:
+        """P&L, trade count and wins per pair — how many trades made that money.
+
+        A pair's total means something different over 2 trades than over 8, so
+        the count travels with the figure everywhere it is shown.
+        """
+        pnl = self.per_pair_pnl()
+        if pnl.empty:
+            return pd.DataFrame()
+        closed = [t for t in self.trades if t["profit"] is not None]
+        rows = []
+        for sym, total in pnl.items():
+            trades = [t for t in closed if t["symbol"] == sym]
+            wins = [t for t in trades if t["profit"] > 0]
+            rows.append({"symbol": sym, "pnl": total, "n_trades": len(trades),
+                         "n_wins": len(wins)})
+        return pd.DataFrame(rows).set_index("symbol")
+
     def positions(self) -> pd.DataFrame:
         """The current target book with live per-position P&L when available."""
         sig = self.latest_signal
