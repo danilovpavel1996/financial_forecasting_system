@@ -1,63 +1,63 @@
 {
-  "fetched_at": "2026-10-02T20:25:37",
+  "fetched_at": "2026-10-09T15:05:44",
   "login": 471278,
-  "balance": 1948.36,
-  "equity": 1947.68,
-  "margin": 58.46,
-  "floating_pnl": -0.86,
+  "balance": 1944.51,
+  "equity": 1953.46,
+  "margin": 65.88,
+  "floating_pnl": 8.83,
   "positions": [
     {
       "symbol": "AUDJPY",
       "side": "buy",
       "volume": 0.01,
       "openPrice": 109.688,
-      "currentPrice": 109.664,
-      "profit": -0.17,
-      "swap": 0
-    },
-    {
-      "symbol": "CADJPY",
-      "side": "buy",
-      "volume": 0.01,
-      "openPrice": 110.7,
-      "currentPrice": 110.724,
-      "profit": 0.13,
-      "swap": 0
+      "currentPrice": 110.472,
+      "profit": 5.2,
+      "swap": 0.27
     },
     {
       "symbol": "EURJPY",
       "side": "buy",
       "volume": 0.01,
       "openPrice": 177.654,
-      "currentPrice": 177.676,
-      "profit": 0.12,
-      "swap": 0
+      "currentPrice": 177.309,
+      "profit": -2.06,
+      "swap": 0.14
     },
     {
       "symbol": "GBPAUD",
       "side": "sell",
       "volume": 0.01,
       "openPrice": 1.90411,
-      "currentPrice": 1.90478,
-      "profit": -0.49,
+      "currentPrice": 1.89605,
+      "profit": 5.59,
+      "swap": -0.01
+    },
+    {
+      "symbol": "EURUSD",
+      "side": "sell",
+      "volume": 0.01,
+      "openPrice": 1.11959,
+      "currentPrice": 1.11949,
+      "profit": 0.08,
       "swap": 0
     },
     {
-      "symbol": "USDCAD",
+      "symbol": "GBPUSD",
       "side": "sell",
       "volume": 0.01,
-      "openPrice": 1.42568,
-      "currentPrice": 1.42583,
-      "profit": -0.13,
+      "openPrice": 1.32268,
+      "currentPrice": 1.32259,
+      "profit": 0.07,
       "swap": 0
     },
     {
-      "symbol": "USDCHF",
-      "side": "sell",
+      "symbol": "USDJPY",
+      "side": "buy",
       "volume": 0.01,
-      "openPrice": 0.82911,
-      "currentPrice": 0.82936,
-      "profit": -0.32,
+      "openPrice": 158.381,
+      "currentPrice": 158.376,
+      "profit": -0.05,
       "swap": 0
     }
   ]
