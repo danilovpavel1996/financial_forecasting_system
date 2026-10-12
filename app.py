@@ -124,11 +124,21 @@ with st.sidebar:
     st.caption(f"Prices through {s.get('prices_through') or '—'} · "
                f"account checked {(s.get('snapshot_at') or '—')[:16].replace('T', ' ')}")
 
+    # Fusion has ignored its own 30-day expiry on two accounts running, so the
+    # date is shown as context rather than raised as an alarm. A genuinely
+    # dead account makes the Friday run fail loudly on its own.
     exp = demo_expiry()
     days_left = (exp - datetime.date.today()).days
-    if days_left <= 10:
-        st.warning(f"Demo account expires in {days_left} days ({exp}). "
-                   "Create a new one, then update MetaApi and DEMO_EXPIRES.")
+    st.caption(
+        f"Practice account **{[a['login'] for a in s['per_account'] if a['active']][0]}** · "
+        + (f"past its nominal {exp} expiry by {-days_left} "
+           f"day{'s' if -days_left != 1 else ''} and still trading"
+           if days_left < 0
+           else f"nominal expiry {exp} ({days_left} "
+                f"day{'s' if days_left != 1 else ''})")
+        + ". Fusion rarely enforces this; if the account ever does die, the "
+          "Friday run fails and you get a notification."
+    )
 
     st.divider()
     if st.button("↻ Refresh market data", width="stretch"):

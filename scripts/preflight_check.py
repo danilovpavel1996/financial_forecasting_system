@@ -6,10 +6,10 @@ needed — that marks the cron run FAILED in Railway, which pushes a
 notification to the Railway mobile app. The log then says exactly what to do.
 
 Checks:
-  1. Fusion Markets demo expiry — demo accounts die 30 days after creation.
-     Expiry date comes from env var DEMO_EXPIRES (YYYY-MM-DD); update it in
-     Railway → service → Variables each time a new demo is created.
-     Warns when <= WARN_DAYS days remain.
+  1. Fusion Markets demo age — reported, never fatal. Fusion does not
+     enforce its own 30-day expiry (two accounts have outlived it), so a
+     dead account is detected by the executor failing to connect, not by a
+     calendar guess.
   2. MetaApi billing balance — queried from the billing API with the normal
      METAAPI_TOKEN. Warns when below BALANCE_WARN_USD (deployment stops
      working entirely at $0, which would kill the whole pipeline).
@@ -26,32 +26,35 @@ import sys
 import urllib.request
 from pathlib import Path
 
-# Checked only weekly (Fridays), so the window must exceed one week or the
-# warning could arrive days before expiry instead of a full run ahead.
-WARN_DAYS            = 10
 BALANCE_WARN_USD     = 3.0
 BILLING_URL = ("https://billing-api-v1.agiliumtrade.agiliumtrade.ai"
                "/users/current/balance")
 
 
-def check_demo_expiry() -> list[str]:
-    # Same source of truth the dashboard reads.
+def note_demo_age() -> list[str]:
+    """Report the demo's nominal expiry, but never fail the run over it.
+
+    This used to fail the run when DEMO_EXPIRES came within ten days, which
+    produced a red notification every Friday for weeks while the account kept
+    trading perfectly. Fusion has now ignored its own 30-day rule on two
+    accounts in a row: 438689 was pronounced dead on 2026-09-13 and traded
+    until 2026-10-02, and 471278 passed 2026-10-11 and was still live on
+    2026-10-12. A date nobody enforces is not a signal, and crying wolf weekly
+    teaches you to ignore the alerts that do matter.
+
+    The real failure mode needs no guesswork: if the account ever dies, the
+    executor cannot connect and the run fails loudly by itself.
+    """
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from src.live.report import demo_expiry
 
     expires = demo_expiry()
-    days_left = (expires - datetime.date.today()).days
-    if days_left < 0:
-        return [f"Fusion demo EXPIRED {-days_left} day(s) ago ({expires}). "
-                "Create a new demo in the Fusion hub, update the account "
-                "login/password in MetaApi, and set DEMO_EXPIRES in Railway "
-                "variables to the new expiry."]
-    if days_left <= WARN_DAYS:
-        return [f"Fusion demo expires in {days_left} day(s) ({expires}). "
-                "Create a new demo account soon: Fusion hub → Create New "
-                "Demo (MT5, USD, 2000), then update the MetaApi account "
-                "credentials and the DEMO_EXPIRES Railway variable."]
-    print(f"  Demo expiry OK: {days_left} days left (expires {expires}).")
+    days = (expires - datetime.date.today()).days
+    if days < 0:
+        print(f"  Demo past its nominal expiry ({expires}, {-days} day(s) "
+              "ago) but still trading — informational only.")
+    else:
+        print(f"  Demo nominal expiry {expires} ({days} day(s)).")
     return []
 
 
@@ -122,7 +125,7 @@ def main() -> None:
 
     print("\nPreflight checks")
     print("────────────────")
-    warnings = (check_demo_expiry() + check_metaapi_balance()
+    warnings = (note_demo_age() + check_metaapi_balance()
                 + check_artifact_push() + check_trade_history())
     if warnings:
         print("\n⚠️  ACTION NEEDED — failing this run so Railway notifies you:")
