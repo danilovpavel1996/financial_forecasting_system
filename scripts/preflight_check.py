@@ -26,7 +26,12 @@ import sys
 import urllib.request
 from pathlib import Path
 
-BALANCE_WARN_USD     = 3.0
+# MetaApi auto-deposit tops the balance up on its own, and its trigger sits
+# below the $3 this check originally used — so $3 fired every Friday while
+# nothing was wrong. The threshold now only trips when auto-deposit has
+# genuinely failed (a declined card, a cancelled method), which still leaves
+# roughly three weeks of runway at the observed ~$0.30/week burn.
+BALANCE_WARN_USD     = 1.0
 BILLING_URL = ("https://billing-api-v1.agiliumtrade.agiliumtrade.ai"
                "/users/current/balance")
 
@@ -71,9 +76,11 @@ def check_metaapi_balance() -> list[str]:
         print(f"  MetaApi balance check skipped (API error: {exc}).")
         return []
     if balance < BALANCE_WARN_USD:
-        return [f"MetaApi balance is ${balance:.2f} (< ${BALANCE_WARN_USD:.0f}). "
-                "Top up at app.metaapi.cloud → Billing → Deposit, or the "
-                "account cannot deploy and the weekly rebalance will stop."]
+        return [f"MetaApi balance is ${balance:.2f} (< "
+                f"${BALANCE_WARN_USD:.2f}). Auto-deposit should have topped "
+                "this up, so check the payment method at app.metaapi.cloud → "
+                "Billing. At $0 the account cannot deploy and the weekly "
+                "rebalance stops entirely."]
     print(f"  MetaApi balance OK: ${balance:.2f}.")
     return []
 
