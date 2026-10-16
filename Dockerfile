@@ -2,9 +2,11 @@
 # schedule and scripts/railway_cron.sh for what a run does).
 FROM python:3.11-slim
 
-# libgomp1: LightGBM runtime; git: pushing weekly artifacts back to GitHub
+# libgomp1: LightGBM runtime; git: pushing weekly artifacts back to GitHub;
+# curl: asking GitHub whether this week's signal already exists, so the second
+# Friday attempt skips a week that already succeeded.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 git \
+    && apt-get install -y --no-install-recommends libgomp1 git curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

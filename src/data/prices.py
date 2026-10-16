@@ -6,6 +6,7 @@ A second run with the same (ticker, start, end) reads from disk — no network.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -71,16 +72,43 @@ def fetch_all_tickers(
     end: str,
     cache_dir: Path,
     force_refresh: bool = False,
+    attempts: int = 4,
+    backoff: float = 5.0,
 ) -> dict[str, pd.DataFrame]:
-    """Fetch every ticker; return {ticker: DataFrame}. Never silently skips."""
+    """Fetch every ticker; return {ticker: DataFrame}. Never silently skips.
+
+    A failed ticker is retried with a growing pause before the whole fetch is
+    declared a failure, because yfinance intermittently returns an empty frame
+    for a ticker that is perfectly fine seconds later. On 2026-10-16 exactly
+    that — one empty response for USDCAD=X — aborted the weekly rebalance and
+    cost a full trading week, with the data available again minutes later.
+
+    Dropping the offending ticker instead is NOT an option: the model ranks a
+    fixed universe cross-sectionally, so quietly ranking 14 pairs instead of 15
+    would change the signal without saying so. Retry, then fail loudly.
+    """
     result: dict[str, pd.DataFrame] = {}
     errors: list[str] = []
     for ticker in tickers:
-        try:
-            result[ticker] = fetch_ticker(ticker, start, end, cache_dir, force_refresh)
-        except Exception as exc:
-            logger.error("FAILED %s: %s", ticker, exc)
-            errors.append(f"{ticker}: {exc}")
+        last_exc: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                result[ticker] = fetch_ticker(ticker, start, end, cache_dir,
+                                              force_refresh)
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < attempts:
+                    pause = backoff * attempt
+                    logger.warning("%s failed (attempt %d/%d): %s — retrying "
+                                   "in %.0fs", ticker, attempt, attempts, exc,
+                                   pause)
+                    time.sleep(pause)
+        if last_exc is not None:
+            logger.error("FAILED %s after %d attempts: %s", ticker, attempts,
+                         last_exc)
+            errors.append(f"{ticker}: {last_exc} (after {attempts} attempts)")
     if errors:
         raise RuntimeError("Price fetch failures:\n" + "\n".join(errors))
     return result

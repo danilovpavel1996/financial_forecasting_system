@@ -17,6 +17,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# The cron fires twice on Friday (15:00 and 19:00 UTC) so a transient failure
+# — a data-provider hiccup, a network blip — gets a second chance while the
+# forex market is still open, instead of costing a whole trading week.
+# The second attempt must not duplicate a successful first one, and the
+# container is ephemeral so it cannot remember: GitHub is the durable record,
+# so ask it whether this week's signal was already published.
+TODAY=$(date -u +%F)
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  api="https://api.github.com/repos/danilovpavel1996/financial_forecasting_system/contents/outputs/signals/signal_forex_${TODAY}.json"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${GITHUB_TOKEN}" "$api" || echo "000")
+  if [[ "$code" == "200" ]]; then
+    echo "Signal for ${TODAY} is already published — this week is done."
+    exit 0
+  fi
+  echo "No published signal for ${TODAY} (HTTP ${code}) — proceeding."
+fi
+
 python scripts/rebalance.py
 python scripts/execute_mt5.py --live
 python scripts/fetch_mt5_history.py --undeploy
