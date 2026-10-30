@@ -1,0 +1,116 @@
+{
+  "date": "2026-10-30",
+  "feature_date": "2026-10-30",
+  "horizon": 5,
+  "model_name": "LightGBM",
+  "model_trained_on": "2026-10-30",
+  "rankings": [
+    {
+      "ticker": "EURAUD=X",
+      "mt5": "EURAUD",
+      "position": "LONG",
+      "predicted_return": 0.000262,
+      "rank": 1
+    },
+    {
+      "ticker": "USDCAD=X",
+      "mt5": "USDCAD",
+      "position": "LONG",
+      "predicted_return": 0.000162,
+      "rank": 2
+    },
+    {
+      "ticker": "EURGBP=X",
+      "mt5": "EURGBP",
+      "position": "LONG",
+      "predicted_return": -5.5e-05,
+      "rank": 3
+    },
+    {
+      "ticker": "GBPAUD=X",
+      "mt5": "GBPAUD",
+      "position": "FLAT",
+      "predicted_return": -0.000679,
+      "rank": 4
+    },
+    {
+      "ticker": "AUDUSD=X",
+      "mt5": "AUDUSD",
+      "position": "FLAT",
+      "predicted_return": -0.000984,
+      "rank": 5
+    },
+    {
+      "ticker": "AUDNZD=X",
+      "mt5": "AUDNZD",
+      "position": "FLAT",
+      "predicted_return": -0.001049,
+      "rank": 6
+    },
+    {
+      "ticker": "EURJPY=X",
+      "mt5": "EURJPY",
+      "position": "FLAT",
+      "predicted_return": -0.001067,
+      "rank": 7
+    },
+    {
+      "ticker": "USDJPY=X",
+      "mt5": "USDJPY",
+      "position": "FLAT",
+      "predicted_return": -0.001108,
+      "rank": 8
+    },
+    {
+      "ticker": "GBPUSD=X",
+      "mt5": "GBPUSD",
+      "position": "FLAT",
+      "predicted_return": -0.001139,
+      "rank": 9
+    },
+    {
+      "ticker": "NZDUSD=X",
+      "mt5": "NZDUSD",
+      "position": "FLAT",
+      "predicted_return": -0.001223,
+      "rank": 10
+    },
+    {
+      "ticker": "CADJPY=X",
+      "mt5": "CADJPY",
+      "position": "SHORT",
+      "predicted_return": -0.001282,
+      "rank": 11
+    },
+    {
+      "ticker": "EURUSD=X",
+      "mt5": "EURUSD",
+      "position": "FLAT",
+      "predicted_return": -0.001314,
+      "rank": 12
+    },
+    {
+      "ticker": "USDCHF=X",
+      "mt5": "USDCHF",
+      "position": "FLAT",
+      "predicted_return": -0.001326,
+      "rank": 13
+    },
+    {
+      "ticker": "AUDJPY=X",
+      "mt5": "AUDJPY",
+      "position": "SHORT",
+      "predicted_return": -0.001652,
+      "rank": 14
+    },
+    {
+      "ticker": "GBPJPY=X",
+      "mt5": "GBPJPY",
+      "position": "SHORT",
+      "predicted_return": -0.001879,
+      "rank": 15
+    }
+  ],
+  "reconstructed": true,
+  "reconstruction_note": "The 2026-10-30 run traded correctly at 15:04 UTC but could not publish its artifacts: the Railway GITHUB_TOKEN lacked write access and the push returned 403, so the signal file died with the container. predicted_return values here were regenerated locally at ~17:55 UTC from later prices and differ slightly from the originals; the regeneration ranks USDCHF where the original ranked CADJPY. The `position` fields are ground truth, taken from the execution logged by the run. Treat this week's IC as approximate."
+}

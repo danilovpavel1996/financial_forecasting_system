@@ -1,0 +1,52 @@
+{
+  "executed_at": "2026-10-30T15:04:14",
+  "signal_date": "2026-10-30",
+  "status": "OK",
+  "book_before": {
+    "EURAUD": "buy",
+    "EURUSD": "sell",
+    "GBPAUD": "buy",
+    "GBPUSD": "sell",
+    "NZDUSD": "sell",
+    "USDCHF": "buy"
+  },
+  "planned_closes": [
+    "EURUSD",
+    "GBPAUD",
+    "GBPUSD",
+    "NZDUSD",
+    "USDCHF"
+  ],
+  "planned_opens": [
+    [
+      "AUDJPY",
+      "sell"
+    ],
+    [
+      "CADJPY",
+      "sell"
+    ],
+    [
+      "EURGBP",
+      "buy"
+    ],
+    [
+      "GBPJPY",
+      "sell"
+    ],
+    [
+      "USDCAD",
+      "buy"
+    ]
+  ],
+  "order_results": [],
+  "book_after_verified": {
+    "EURAUD": "buy",
+    "AUDJPY": "sell",
+    "CADJPY": "sell",
+    "EURGBP": "buy",
+    "GBPJPY": "sell",
+    "USDCAD": "buy"
+  },
+  "note": "Transcribed from the Railway run logs. The run executed and verified this book, then crashed at the artifact push (403), so its own receipt was lost with the container."
+}
