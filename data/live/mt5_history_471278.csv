@@ -23,9 +23,19 @@ open_time,symbol,side,volume,open_price,close_time,close_price,profit,note
 2026-10-16 15:12:58,usdchf,sell,0.01,0.8229,2026-10-23 19:05:47,0.82517,-2.75,swap=-1.13;commission=-0.04
 2026-10-23 15:03:21,eurjpy,buy,0.01,175.615,2026-10-23 19:05:45,175.576,-0.25,swap=0.00;commission=-0.04
 2026-10-23 15:03:24,gbpjpy,buy,0.01,209.822,2026-10-23 19:05:46,209.747,-0.48,swap=0.00;commission=-0.04
-2026-10-23 19:05:47,euraud,buy,0.01,1.59093,,,,still_open;swap=0.00;commission=-0.02
-2026-10-23 19:05:50,eurusd,sell,0.01,1.11943,,,,still_open;swap=0.00;commission=-0.02
-2026-10-23 19:05:50,gbpaud,buy,0.01,1.90057,,,,still_open;swap=0.00;commission=-0.02
-2026-10-23 19:05:50,gbpusd,sell,0.01,1.33729,,,,still_open;swap=0.00;commission=-0.02
-2026-10-23 19:05:53,nzdusd,sell,0.01,0.57009,,,,still_open;swap=0.00;commission=-0.02
-2026-10-23 19:05:53,usdchf,buy,0.01,0.82518,,,,still_open;swap=0.00;commission=-0.02
+2026-10-23 19:05:47,euraud,buy,0.01,1.59093,2026-11-06 15:02:26,1.61804,18.68,swap=-1.14;commission=-0.04
+2026-10-23 19:05:50,eurusd,sell,0.01,1.11943,2026-10-30 15:03:35,1.1149,4.53,swap=0.16;commission=-0.04
+2026-10-23 19:05:50,gbpaud,buy,0.01,1.90057,2026-10-30 15:03:35,1.90438,2.68,swap=-0.47;commission=-0.04
+2026-10-23 19:05:50,gbpusd,sell,0.01,1.33729,2026-10-30 15:03:35,1.33909,-1.8,swap=-0.08;commission=-0.04
+2026-10-23 19:05:53,nzdusd,sell,0.01,0.57009,2026-10-30 15:03:35,0.5635,6.59,swap=0.06;commission=-0.04
+2026-10-23 19:05:53,usdchf,buy,0.01,0.82518,2026-10-30 15:03:35,0.82473,-0.55,swap=0.36;commission=-0.04
+2026-10-30 15:03:36,audjpy,sell,0.01,110.615,2026-11-06 15:02:26,109.066,9.78,swap=-0.62;commission=-0.04
+2026-10-30 15:03:36,cadjpy,sell,0.01,112.7,2026-11-06 15:02:26,112.256,2.8,swap=-0.27;commission=-0.04
+2026-10-30 15:03:37,eurgbp,buy,0.01,0.83262,2026-11-06 15:02:26,0.83449,2.5,swap=-0.52;commission=-0.04
+2026-10-30 15:03:38,gbpjpy,sell,0.01,210.658,2026-11-06 15:02:26,211.479,-5.19,swap=-1.00;commission=-0.04
+2026-10-30 15:03:39,usdcad,buy,0.01,1.396,,,,still_open;swap=0.00;commission=-0.02
+2026-11-06 15:02:26,audjpy,buy,0.01,109.066,,,,still_open;swap=0.00;commission=-0.02
+2026-11-06 15:02:26,eurusd,sell,0.01,1.11473,,,,still_open;swap=0.00;commission=-0.02
+2026-11-06 15:02:27,gbpusd,sell,0.01,1.33582,,,,still_open;swap=0.00;commission=-0.02
+2026-11-06 15:02:29,nzdusd,sell,0.01,0.5546,,,,still_open;swap=0.00;commission=-0.02
+2026-11-06 15:02:29,usdchf,buy,0.01,0.8209,,,,still_open;swap=0.00;commission=-0.02

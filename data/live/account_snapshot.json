@@ -1,64 +1,64 @@
 {
-  "fetched_at": "2026-10-30T11:39:06",
+  "fetched_at": "2026-11-06T15:03:04",
   "login": 471278,
-  "balance": 1940.22,
-  "equity": 1942.37,
-  "margin": 64.82,
-  "floating_pnl": 2.06,
+  "balance": 1976.32,
+  "equity": 1986.84,
+  "margin": 56.95,
+  "floating_pnl": 10.24,
   "positions": [
     {
-      "symbol": "EURAUD",
+      "symbol": "USDCAD",
       "side": "buy",
       "volume": 0.01,
-      "openPrice": 1.59093,
-      "currentPrice": 1.59192,
-      "profit": 0.11,
-      "swap": -0.57
+      "openPrice": 1.396,
+      "currentPrice": 1.41045,
+      "profit": 10.36,
+      "swap": 0.14
+    },
+    {
+      "symbol": "AUDJPY",
+      "side": "buy",
+      "volume": 0.01,
+      "openPrice": 109.066,
+      "currentPrice": 109.045,
+      "profit": -0.15,
+      "swap": 0
     },
     {
       "symbol": "EURUSD",
       "side": "sell",
       "volume": 0.01,
-      "openPrice": 1.11943,
-      "currentPrice": 1.11944,
-      "profit": 0.13,
-      "swap": 0.16
-    },
-    {
-      "symbol": "GBPAUD",
-      "side": "buy",
-      "volume": 0.01,
-      "openPrice": 1.90057,
-      "currentPrice": 1.9094,
-      "profit": 5.72,
-      "swap": -0.47
+      "openPrice": 1.11473,
+      "currentPrice": 1.11475,
+      "profit": -0.04,
+      "swap": 0
     },
     {
       "symbol": "GBPUSD",
       "side": "sell",
       "volume": 0.01,
-      "openPrice": 1.33729,
-      "currentPrice": 1.34268,
-      "profit": -5.49,
-      "swap": -0.08
+      "openPrice": 1.33582,
+      "currentPrice": 1.33576,
+      "profit": 0.04,
+      "swap": 0
     },
     {
       "symbol": "NZDUSD",
       "side": "sell",
       "volume": 0.01,
-      "openPrice": 0.57009,
-      "currentPrice": 0.56445,
-      "profit": 5.72,
-      "swap": 0.06
+      "openPrice": 0.5546,
+      "currentPrice": 0.55459,
+      "profit": -0.01,
+      "swap": 0
     },
     {
       "symbol": "USDCHF",
       "side": "buy",
       "volume": 0.01,
-      "openPrice": 0.82518,
-      "currentPrice": 0.82151,
-      "profit": -4.13,
-      "swap": 0.36
+      "openPrice": 0.8209,
+      "currentPrice": 0.82095,
+      "profit": 0.04,
+      "swap": 0
     }
   ]
 }
