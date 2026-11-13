@@ -59,10 +59,20 @@ st.set_page_config(page_title="Live Forex Monitor", page_icon="📈",
 
 st.markdown("""
 <style>
-  .hero-label { font-size: 0.95rem; color: #8a8a86; margin-bottom: -0.4rem; }
-  .hero-value { font-size: 3.6rem; font-weight: 700; line-height: 1.1; }
-  .hero-sub   { font-size: 1.05rem; color: #8a8a86; }
-  .plain      { font-size: 1.05rem; line-height: 1.6; }
+  .hero-label { font-size: .82rem; letter-spacing: .09em; text-transform: uppercase;
+                color: #8a8a86; margin-bottom: -.35rem; }
+  .hero-value { font-size: 3.9rem; font-weight: 650; line-height: 1.05;
+                letter-spacing: -.02em; font-variant-numeric: proportional-nums; }
+  .hero-sub   { font-size: 1.02rem; color: #8a8a86; margin-top: .15rem; }
+  .plain      { font-size: 1.03rem; line-height: 1.65; max-width: 78ch; }
+  /* Stat tiles: numbers align, labels recede - reads like a statement, not a toy */
+  div[data-testid="stMetric"] { padding: .35rem 0 .1rem 0; }
+  div[data-testid="stMetricLabel"] p { font-size: .78rem !important;
+      letter-spacing: .07em; text-transform: uppercase; color: #8a8a86 !important; }
+  div[data-testid="stMetricValue"] { font-size: 1.75rem !important;
+      font-weight: 600 !important; font-variant-numeric: tabular-nums; }
+  h3 { margin-top: .4rem !important; }
+  .stCaption, .caption-tight { color: #8a8a86; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -200,23 +210,36 @@ with side:
              help="Weeks of completed trading that can be scored.")
 
 # Plain-language read of what the numbers mean, so the page explains itself.
-avg_win, avg_loss = s["avg_win"], s["avg_loss"]
+# Phrasing follows the sign of the result - it used to assert the wallet was
+# down regardless, which became wrong the moment it crossed back above 2,000.
+avg_win, avg_loss, exp = s["avg_win"], s["avg_loss"], s["expectancy"]
+verdict = ("is **up**" if total > 0 else "is **down**" if total < 0 else "is flat")
+mechanism = (
+    f"Each trade is worth <b>{money(exp)}</b> on average: winning "
+    f"{s['win_rate']:.0%} of the time at <b>{money(avg_win)}</b> a win, "
+    f"losing the rest at <b>{money(avg_loss)}</b>. The wins are individually "
+    f"smaller than the losses, so the whole edge rests on winning slightly "
+    f"more often than not — a thin margin that a handful of bad weeks can "
+    f"erase."
+    if exp > 0 else
+    f"Each trade is worth <b>{money(exp)}</b> on average: winning "
+    f"{s['win_rate']:.0%} of the time at <b>{money(avg_win)}</b> a win is not "
+    f"enough to cover losing the rest at <b>{money(avg_loss)}</b>."
+)
 st.markdown(
     f"<div class='plain'><b>In plain terms.</b> Out of "
     f"<b>{s['n_closed_trades']}</b> finished trades, <b>{s['n_winners']}</b> "
-    f"made money — a {s['win_rate']:.0%} hit rate, slightly better than a coin "
-    f"flip. The wallet is still down because the wins are smaller than the "
-    f"losses: an average winner makes <b>{money(avg_win)}</b> while an average "
-    f"loser costs <b>{money(avg_loss)}</b>. Winning more often than not is not "
-    f"enough when the losses are the bigger ones.</div>",
+    f"made money, and the wallet {verdict} <b>{money(total)}</b>. "
+    f"{mechanism}</div>".replace("**", ""),
     unsafe_allow_html=True)
 st.write("")
 
-# ── 2. Wallet over time ──────────────────────────────────────────────────────
+# ── 2. Wallet: history and projection, one continuous picture ────────────────
 
-st.subheader("How the wallet got here")
+st.subheader("Your wallet — where it has been, and where it could go")
 
 pnl = rep.pnl
+weekly = rep.weekly_pnl()
 if pnl.empty:
     st.write("No closed trades yet.")
 else:
@@ -225,88 +248,138 @@ else:
     series = (pnl if grain == "Daily"
               else pnl.resample("W-FRI").last().ffill())
     wallet_curve = START_BALANCE + series["TOTAL"]
+    today = pd.Timestamp(datetime.date.today())
 
+    proj = project_wallet(weekly, wallet, weeks=12)
     fig = go.Figure()
-    # Shade between the wallet and the starting balance, not down to zero, so
-    # the filled area reads as "how far ahead or behind you are".
+
+    # Projection first so the actual line draws on top of the band.
+    if not proj.empty:
+        pdates = [today + pd.Timedelta(weeks=int(w)) for w in proj["week"]]
+        fig.add_trace(go.Scatter(x=pdates, y=proj["p90"], mode="lines",
+                                 line=dict(width=0), hoverinfo="skip",
+                                 showlegend=False))
+        fig.add_trace(go.Scatter(
+            x=pdates, y=proj["p10"], mode="lines", line=dict(width=0),
+            fill="tonexty", fillcolor="rgba(138,138,134,0.22)",
+            hoverinfo="skip", showlegend=False))
+        fig.add_trace(go.Scatter(
+            x=pdates, y=proj["p50"], mode="lines",
+            line=dict(color=MUTED, width=2, dash="dash"),
+            name="If the next weeks resemble the last",
+            hovertemplate="<b>%{x|%d %b %Y}</b><br>Middle outcome "
+                          "$%{y:,.0f}<extra></extra>"))
+
+    # Actual: shaded against the starting balance so above/below reads instantly.
     fig.add_trace(go.Scatter(
         x=wallet_curve.index, y=[START_BALANCE] * len(wallet_curve),
-        mode="lines", line=dict(width=0), hoverinfo="skip"))
+        mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False))
     fig.add_trace(go.Scatter(
         x=wallet_curve.index, y=wallet_curve, mode="lines",
-        line=dict(color=GAIN if total >= 0 else LOSS, width=2, shape="hv"),
+        line=dict(color=GAIN if total >= 0 else LOSS, width=2.2, shape="hv"),
         fill="tonexty", fillcolor=GAIN_F if total >= 0 else LOSS_F,
-        hovertemplate="<b>%{x|%d %b %Y}</b><br>Wallet $%{y:,.2f}<extra></extra>",
-    ))
-    fig.add_hline(y=START_BALANCE, line_width=1.5, line_color=MUTED)
+        name="Banked so far",
+        hovertemplate="<b>%{x|%d %b %Y}</b><br>Wallet $%{y:,.2f}<extra></extra>"))
+
+    fig.add_hline(y=START_BALANCE, line_width=1.4, line_color=MUTED)
     fig.add_annotation(x=wallet_curve.index[0], y=START_BALANCE, xref="x",
-                       yref="y", text=f"started at ${START_BALANCE:,.0f}",
-                       showarrow=False, xanchor="left", yanchor="bottom",
-                       font=dict(size=11, color=MUTED))
-    base_layout(fig, 340, "Wallet value (USD)")
-    # Keep the zero-profit line visible instead of letting autoscale hide it.
-    lo = min(float(wallet_curve.min()), START_BALANCE)
-    hi = max(float(wallet_curve.max()), START_BALANCE)
-    pad = max(8.0, 0.08 * (hi - lo))
-    fig.update_yaxes(range=[lo - pad, hi + pad])
-    st.plotly_chart(fig, width="stretch")
-    st.caption(
-        f"Each step is money actually banked when a trade closed — the line "
-        f"only moves on closing days. The flat line is your ${START_BALANCE:,.0f} "
-        f"starting point: below it you are down, above it you are up. "
-        f"{money(s.get('floating_pnl'))} is currently floating on the six open "
-        "trades and is not counted until they close."
-    )
-
-# ── 3. Where it could go ─────────────────────────────────────────────────────
-
-st.subheader("Where it could go from here")
-
-proj = project_wallet(weekly, wallet, weeks=12)
-if proj.empty:
-    st.write("Not enough weeks yet to show a range.")
-else:
-    today = pd.Timestamp(datetime.date.today())
-    proj["date"] = [today + pd.Timedelta(weeks=int(w)) for w in proj["week"]]
-    fan = go.Figure()
-    fan.add_trace(go.Scatter(x=proj["date"], y=proj["p90"], mode="lines",
-                             line=dict(width=0), hoverinfo="skip"))
-    fan.add_trace(go.Scatter(
-        x=proj["date"], y=proj["p10"], mode="lines", line=dict(width=0),
-        fill="tonexty", fillcolor="rgba(128,128,128,0.28)", hoverinfo="skip"))
-    fan.add_trace(go.Scatter(
-        x=proj["date"], y=proj["p50"], mode="lines",
-        line=dict(color=MUTED, width=2, dash="dash"),
-        hovertemplate="<b>%{x|%d %b}</b><br>Middle outcome $%{y:,.0f}"
-                      "<extra></extra>"))
-    fan.add_hline(y=START_BALANCE, line_width=1.5, line_color=MUTED)
-    fan.add_annotation(x=proj["date"].iloc[0], y=START_BALANCE, xref="x",
                        yref="y", text=f"${START_BALANCE:,.0f} break-even",
                        showarrow=False, xanchor="left", yanchor="bottom",
                        font=dict(size=11, color=MUTED))
-    base_layout(fan, 300, "Wallet value (USD)")
-    # Autoscale clips the top of the band against the break-even line; pad so
-    # the whole fan and that line are always visible.
-    lo = min(float(proj["p10"].min()), START_BALANCE)
-    hi = max(float(proj["p90"].max()), START_BALANCE)
-    pad = max(10.0, 0.07 * (hi - lo))
-    fan.update_yaxes(range=[lo - pad, hi + pad])
-    st.plotly_chart(fan, width="stretch")
+    fig.add_shape(type="line", x0=today, x1=today, xref="x", y0=0, y1=1,
+                  yref="paper",
+                  line=dict(color=MUTED, width=1, dash="dot"))
+    fig.add_annotation(x=today, xref="x", y=1, yref="paper", text="today",
+                       showarrow=False, xanchor="right", yanchor="bottom",
+                       font=dict(size=11, color=MUTED))
+    base_layout(fig, 420, "Wallet value (USD)")
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
+                    font=dict(color=MUTED, size=12),
+                    bgcolor="rgba(0,0,0,0)"))
+    st.plotly_chart(fig, width="stretch")
 
-    p10, p50, p90 = (proj["p10"].iloc[-1], proj["p50"].iloc[-1],
-                     proj["p90"].iloc[-1])
-    st.markdown(
-        f"<div class='plain'><b>Read this as a spread, not a prediction.</b> "
-        f"It shuffles the {len(weekly)} weeks already traded and deals them out "
-        f"12 more times. In 8 of 10 of those shuffles the wallet lands between "
-        f"<b>${p10:,.0f}</b> and <b>${p90:,.0f}</b>, with the middle around "
-        f"<b>${p50:,.0f}</b>. The spread is far bigger than the drift, which is "
-        f"the real message: at this sample size the week-to-week noise swamps "
-        f"any trend, and nothing here says the system will make money. If the "
-        f"model has no edge, the middle line drifts down by roughly the trading "
-        f"costs.</div>",
-        unsafe_allow_html=True)
-st.write("")
+    if not proj.empty:
+        p10, p50, p90 = (proj["p10"].iloc[-1], proj["p50"].iloc[-1],
+                         proj["p90"].iloc[-1])
+        st.caption(
+            f"Solid line to the left of *today* is money actually banked — it "
+            f"only moves when a trade closes, and {money(s.get('floating_pnl'))} "
+            f"is currently floating on the open book. The shaded cone to the "
+            f"right is **not a forecast**: it reshuffles the "
+            f"{len(weekly)} weeks already traded and deals them out 12 more "
+            f"times. Eight times in ten that lands between **\\${p10:,.0f}** "
+            f"and **\\${p90:,.0f}**, middle around **\\${p50:,.0f}** — a "
+            f"spread far "
+            f"wider than the drift, which is the honest summary of how little "
+            f"20 weeks can tell us."
+        )
+
+
+# ── 3. Weekly contribution by pair ───────────────────────────────────────────
+
+st.subheader("What each pair contributed, week by week")
+
+wpp = rep.weekly_pair_pnl()
+if wpp.empty:
+    st.write("No closed trades yet.")
+else:
+    show = wpp.tail(16)
+    labels = [d.strftime("%d %b") for d in show.index]
+    fig = go.Figure()
+    # One trace per pair, but colour carries GAIN/LOSS rather than identity:
+    # 15 pairs cannot be told apart by hue (and the contribution is too evenly
+    # spread to fold into a top-N + "Other"), so the pair code is printed on
+    # the segment instead. Colour answers "did this help?", text answers "who?".
+    for sym in show.columns:
+        vals = show[sym].values
+        if not (abs(vals) > 0).any():
+            continue
+        name = PAIR_NAMES.get(sym, sym)
+        fig.add_trace(go.Bar(
+            x=labels, y=vals, name=name,
+            marker_color=[GAIN if v > 0 else LOSS for v in vals],
+            marker_line=dict(width=0),
+            text=[name.replace("/", "") if abs(v) >= 3.5 else "" for v in vals],
+            textposition="inside", insidetextanchor="middle",
+            # Horizontal only: plotly otherwise rotates the code vertically in
+            # a narrow bar, which is worse than omitting it. Labels that do not
+            # fit are simply dropped - the hover still names every segment.
+            textangle=0, cliponaxis=False,
+            textfont=dict(size=10, color="rgba(255,255,255,0.92)"),
+            hovertemplate=f"<b>{name}</b><br>week of %{{x}}"
+                          "<br>%{y:+,.2f} USD<extra></extra>",
+            showlegend=False))
+    # The net line is what the stack adds up to - without it the eye cannot
+    # judge whether a week with tall bars on both sides ended up or down.
+    net = show.sum(axis=1)
+    fig.add_trace(go.Scatter(
+        x=labels, y=net.values, mode="markers+text",
+        marker=dict(color=MUTED, size=7, symbol="diamond"),
+        text=[f"{v:+,.0f}" for v in net.values], textposition="top center",
+        textfont=dict(size=11, color=MUTED), name="Week total",
+        hovertemplate="<b>Week total</b><br>%{y:+,.2f} USD<extra></extra>",
+        showlegend=False))
+    fig.add_hline(y=0, line_width=1.4, line_color=MUTED)
+    base_layout(fig, 430, "Banked that week (USD)")
+    fig.update_layout(barmode="relative", bargap=0.28)
+    st.plotly_chart(fig, width="stretch")
+
+    last_wk = wpp.iloc[-1]
+    movers = last_wk[last_wk != 0].sort_values(ascending=False)
+    pos = [f"{PAIR_NAMES.get(k, k)} {v:+.2f}" for k, v in movers.items() if v > 0]
+    neg = [f"{PAIR_NAMES.get(k, k)} {v:+.2f}" for k, v in movers.items() if v < 0]
+    st.caption(
+        f"Each bar is one week, split into the pairs that closed in it — "
+        f"blue above the line added money, red below took it away, and the "
+        f"diamond is the week's net. Week of "
+        f"**{wpp.index[-1]:%d %b}**: {', '.join(pos) if pos else 'nothing positive'}"
+        + (f" · against {', '.join(neg)}" if neg else "")
+        + f" — **{money(last_wk.sum())} net**. Pair names are printed on the "
+        "segments rather than carried by colour: fifteen pairs is far more than "
+        "the number of hues anyone can reliably tell apart."
+    )
 
 # ── 4. Which pairs made and lost the money ───────────────────────────────────
 

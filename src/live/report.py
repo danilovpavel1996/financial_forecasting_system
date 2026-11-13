@@ -364,6 +364,20 @@ class LiveReport:
         finals = self.pnl.drop(columns="TOTAL").iloc[-1]
         return finals[finals != 0].sort_values()
 
+    def weekly_pair_pnl(self) -> pd.DataFrame:
+        """Realized P&L per pair per week — who contributed what, each Friday.
+
+        Rows are week-ending Fridays, columns are pairs, values are USD banked
+        that week. Pairs that never traded are dropped. This is the per-week
+        decomposition of the wallet curve: each row sums to that week's total.
+        """
+        if self.pnl.empty:
+            return pd.DataFrame()
+        cum = self.pnl.drop(columns="TOTAL").resample("W-FRI").last().ffill()
+        wk = cum.diff()
+        wk.iloc[0] = cum.iloc[0]          # first week is its own change
+        return wk.loc[:, wk.abs().sum() > 0].fillna(0.0)
+
     def per_pair_stats(self) -> pd.DataFrame:
         """P&L, trade count and wins per pair — how many trades made that money.
 
@@ -484,6 +498,13 @@ def build_report() -> LiveReport:
         stats["worst_trade"] = (worst["symbol"], worst["profit"])
     else:
         stats["best_trade"] = stats["worst_trade"] = (None, 0.0)
+
+    # Expectancy per trade = hit_rate*avg_win + (1-hit_rate)*avg_loss. This is
+    # the number that decides whether winning 54% of the time actually pays,
+    # given that the average loser is bigger than the average winner.
+    wr = stats["win_rate"]
+    stats["expectancy"] = (wr * stats["avg_win"] + (1 - wr) * stats["avg_loss"]
+                           if closed else float("nan"))
 
     stats["prices_through"] = (last_price.date().isoformat()
                                if last_price is not None else None)
