@@ -59,9 +59,15 @@ ACCOUNTS: dict[str, dict] = {
     # trades. The cut-off is enforced on every load, which matters because the
     # weekly fetch rewrites this file from MetaApi and would otherwise keep
     # pulling them back in.
-    "471278": {"start_balance": 1970.37, "active": True,
-               "source": "MetaApi",
+    "471278": {"start_balance": 1970.37, "active": False,
+               "source": "MetaApi (frozen; demo expired, broker unreachable "
+                         "2026-11-20)",
                "active_from": "2026-10-02 00:00:00"},
+    # DEMO_004, opened 2026-11-20 with the 2,015.36 that 471278 had banked
+    # (its balance, not its equity - the +18.76 floating on the six positions
+    # that died with it was never realized and is not carried over).
+    "585060": {"start_balance": 2015.36, "active": True,
+               "source": "MetaApi"},
 }
 
 
@@ -81,7 +87,7 @@ START_BALANCE = 2000.0     # original capital in June 2026; the base every
                            # happened to open with.
 # Fusion demos live 30 days. Override per environment with DEMO_EXPIRES;
 # scripts/preflight_check.py reads the same value to decide when to page.
-DEMO_EXPIRES_DEFAULT = "2026-10-11"   # 471278, created 2026-09-11
+DEMO_EXPIRES_DEFAULT = "2026-12-20"   # 585060, created 2026-11-20 (30-day demo)
 
 
 def demo_expiry() -> datetime.date:
